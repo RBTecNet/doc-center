@@ -1,0 +1,32 @@
+{
+  "name": "doc-center",
+  "version": "0.1.0",
+  "description": "Base documental do capivara: skills, memorias, documentacao e prompts, servidos por MCP",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "doc-center": "dist/cli.js"
+  },
+  "//": {
+    "dependencias": "ZERO dependencias de runtime, como o harness. O banco e node:sqlite, o servidor e node:http, e o MCP e JSON-RPC escrito aqui. Um teste de arquitetura falha se alguma for adicionada."
+  },
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.frontend.json",
+    "test": "vitest run",
+    "check": "npm run build && npm run typecheck && npm test",
+    "start": "node dist/cli.js"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}
