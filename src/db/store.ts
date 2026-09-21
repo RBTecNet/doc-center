@@ -10,7 +10,7 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
-import { COLUNAS_NOVAS, SCHEMA, SEM_CATEGORIA, areaValida, comoSlug, type ArquivoDoDocumento, type Documento, type Projeto } from "./schema.js";
+import { COLUNAS_NOVAS, SCHEMA, SEM_CATEGORIA, acumula, areaValida, comoSlug, type ArquivoDoDocumento, type Documento, type Projeto } from "./schema.js";
 
 /**
  * Erro de quem usou, não do servidor.
@@ -56,6 +56,9 @@ interface LinhaDocumento {
   area: string;
   versao: string;
   fonte: string;
+  status: string;
+  natureza: string;
+  procedencia: string;
   criado_em: string;
   alterado_em: string;
 }
@@ -93,6 +96,9 @@ const comoDocumento = (linha: LinhaDocumento): Documento => ({
   area: linha.area ?? "geral",
   versao: linha.versao ?? "",
   fonte: linha.fonte ?? "",
+  status: linha.status ?? "ativo",
+  natureza: linha.natureza ?? "",
+  procedencia: linha.procedencia ?? "",
   criadoEm: linha.criado_em,
   alteradoEm: linha.alterado_em,
 });
@@ -229,6 +235,9 @@ export class Store {
     area?: string;
     versao?: string;
     fonte?: string;
+    status?: string;
+    natureza?: string;
+    procedencia?: string;
     /** Os arquivos que acompanham a base, quando o documento veio de um pacote. */
     arquivos?: { caminho: string; conteudo: Buffer; binario: boolean }[];
   }): Documento {
@@ -243,8 +252,8 @@ export class Store {
     const instante = this.agora();
     this.db
       .prepare(
-        "INSERT INTO documentos (projeto_id, tipo, slug, titulo, conteudo, descricao, categoria, gatilhos, restricoes, area, versao, fonte, criado_em, alterado_em)" +
-          " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO documentos (projeto_id, tipo, slug, titulo, conteudo, descricao, categoria, gatilhos, restricoes, area, versao, fonte, status, natureza, procedencia, criado_em, alterado_em)" +
+          " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         projetoId,
@@ -259,6 +268,9 @@ export class Store {
         areaValida(entrada.area ?? "geral"),
         entrada.versao ?? "",
         entrada.fonte ?? "",
+        entrada.status ?? "ativo",
+        entrada.natureza ?? "",
+        entrada.procedencia ?? "",
         instante,
         instante,
       );
@@ -320,6 +332,78 @@ export class Store {
 
   removerDocumento(id: number): void {
     this.db.prepare("DELETE FROM documentos WHERE id = ?").run(id);
+  }
+
+  // ---------------------------------------------------------------- memórias
+
+  /**
+   * Registra uma memória do projeto, vinda de um run.
+   *
+   * Duas regras, e as duas vêm da natureza:
+   *
+   * **Estado substitui.** Há um por projeto, e ele é reescrito. Guardar
+   * histórico de estado produziria uma pilha de verdades vencidas, e quem
+   * lesse a mais antiga trabalharia sobre o que já não é.
+   *
+   * **O resto acumula, sem duplicar.** Mesma natureza e mesmo título é a mesma
+   * memória: o run seguinte a atualiza em vez de criar a segunda cópia — senão
+   * cada execução multiplicaria o acervo do projeto.
+   */
+  registrarMemoria(entrada: {
+    projetoId: number;
+    natureza: string;
+    titulo: string;
+    conteudo: string;
+    procedencia?: string;
+    status?: string;
+  }): Documento {
+    const status = entrada.status ?? "rascunho";
+    const slug = acumula(entrada.natureza) ? comoSlug(entrada.titulo) : "estado-atual";
+    const instante = this.agora();
+
+    const existente = this.documento(entrada.projetoId, "memoria", slug);
+    if (existente) {
+      this.db
+        .prepare(
+          "UPDATE documentos SET titulo = ?, conteudo = ?, natureza = ?, procedencia = ?, status = ?, alterado_em = ? WHERE id = ?",
+        )
+        .run(entrada.titulo, entrada.conteudo, entrada.natureza, entrada.procedencia ?? "", status, instante, existente.id);
+      return this.documentoPorId(existente.id)!;
+    }
+
+    return this.criarDocumento({
+      projetoId: entrada.projetoId,
+      tipo: "memoria",
+      titulo: entrada.titulo,
+      slug,
+      conteudo: entrada.conteudo,
+      natureza: entrada.natureza,
+      procedencia: entrada.procedencia ?? "",
+      status,
+    });
+  }
+
+  /** As memórias de um projeto, de todas as naturezas. */
+  memorias(projetoId: number): Documento[] {
+    const linhas = this.db
+      .prepare("SELECT * FROM documentos WHERE projeto_id = ? AND tipo = 'memoria' ORDER BY natureza, titulo")
+      .all(projetoId) as unknown as LinhaDocumento[];
+    return linhas.map(comoDocumento);
+  }
+
+  /** O que espera aprovação, do projeto ou de todos. */
+  rascunhos(projetoId?: number): Documento[] {
+    const linhas =
+      projetoId === undefined
+        ? (this.db.prepare("SELECT * FROM documentos WHERE status = 'rascunho' ORDER BY alterado_em DESC").all() as unknown as LinhaDocumento[])
+        : (this.db
+            .prepare("SELECT * FROM documentos WHERE status = 'rascunho' AND projeto_id = ? ORDER BY alterado_em DESC")
+            .all(projetoId) as unknown as LinhaDocumento[]);
+    return linhas.map(comoDocumento);
+  }
+
+  aprovar(id: number): void {
+    this.db.prepare("UPDATE documentos SET status = 'ativo', alterado_em = ? WHERE id = ?").run(this.agora(), id);
   }
 
   // ---------------------------------------------------------------- arquivos

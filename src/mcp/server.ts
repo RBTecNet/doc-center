@@ -120,6 +120,9 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
           });
         }
         for (const documento of store.listarDoProjeto(projeto.id)) {
+          // Rascunho não é material de run: ele existe para ser revisado, e
+          // entregá-lo antes disso anularia a revisão.
+          if (documento.status === "rascunho") continue;
           recursos.push({
             uri: uriDoDocumento(projeto.slug, documento),
             name: documento.titulo,
@@ -228,6 +231,24 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
       return responder({
         tools: [
           {
+            name: "registrar_memoria",
+            description:
+              "Registra uma memória do projeto: o que alguém precisa saber para continuar o trabalho. " +
+              "Entra como rascunho e vale depois de aprovada na interface. " +
+              "Naturezas: decisao, armadilha, convencao (acumulam) e estado (substitui o anterior).",
+            inputSchema: {
+              type: "object",
+              properties: {
+                projeto: { type: "string", description: "o slug do projeto" },
+                natureza: { type: "string", enum: ["decisao", "armadilha", "convencao", "estado"] },
+                titulo: { type: "string", description: "uma linha que identifica a memória" },
+                conteudo: { type: "string", description: "o que precisa ser sabido, em markdown" },
+                procedencia: { type: "string", description: "o run e a fase que a produziram" },
+              },
+              required: ["projeto", "natureza", "titulo", "conteudo"],
+            },
+          },
+          {
             name: "listar_material",
             description:
               "O material de um projeto: o pedido e os documentos que ele usa. " +
@@ -243,9 +264,47 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
 
     case "tools/call": {
       const nome = String(request.params?.name ?? "");
-      if (nome !== "listar_material") return recusar(PARAMETRO_INVALIDO, `ferramenta desconhecida: ${nome}`);
+      const argumentos = (request.params?.arguments ?? {}) as Record<string, string>;
 
-      const argumentos = (request.params?.arguments ?? {}) as { projeto?: string };
+      if (nome === "registrar_memoria") {
+        const projeto = store.projetoPorSlug(String(argumentos.projeto ?? ""));
+        if (!projeto) {
+          return responder({ isError: true, content: [{ type: "text", text: `projeto "${argumentos.projeto}" não existe` }] });
+        }
+
+        const natureza = String(argumentos.natureza ?? "decisao");
+        if (!["decisao", "armadilha", "convencao", "estado"].includes(natureza)) {
+          return responder({
+            isError: true,
+            content: [{ type: "text", text: `natureza desconhecida: ${natureza}. Use decisao, armadilha, convencao ou estado.` }],
+          });
+        }
+
+        const titulo = String(argumentos.titulo ?? "").trim();
+        const conteudo = String(argumentos.conteudo ?? "").trim();
+        if (titulo === "" || conteudo === "") {
+          return responder({ isError: true, content: [{ type: "text", text: "memória precisa de título e conteúdo" }] });
+        }
+
+        const memoria = store.registrarMemoria({
+          projetoId: projeto.id,
+          natureza,
+          titulo,
+          conteudo,
+          procedencia: String(argumentos.procedencia ?? ""),
+        });
+
+        return responder({
+          content: [
+            {
+              type: "text",
+              text: `memória "${memoria.titulo}" registrada como rascunho em ${projeto.slug} (natureza ${natureza})`,
+            },
+          ],
+        });
+      }
+
+      if (nome !== "listar_material") return recusar(PARAMETRO_INVALIDO, `ferramenta desconhecida: ${nome}`);
       const projeto = store.projetoPorSlug(String(argumentos.projeto ?? ""));
       if (!projeto) {
         // Erro DA FERRAMENTA, não do protocolo: o cliente pediu certo, o dado é

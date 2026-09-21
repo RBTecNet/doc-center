@@ -250,3 +250,9 @@ for (const formulario of document.querySelectorAll<HTMLFormElement>("form[data-p
     location.reload();
   });
 }
+
+for (const botao of document.querySelectorAll<HTMLButtonElement>("[data-aprovar]")) {
+  botao.addEventListener("click", () => {
+    void json("POST", `/api/documentos/${botao.dataset.aprovar}/aprovar`, {}).then(avisar);
+  });
+}

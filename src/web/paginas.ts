@@ -13,7 +13,7 @@
 
 import type { Store } from "../db/store.js";
 import type { Documento, Projeto } from "../db/schema.js";
-import { conteineresPara, ehDeCatalogo } from "../db/schema.js";
+import { NATUREZAS, conteineresPara, ehDeCatalogo } from "../db/schema.js";
 import { cartaoDeCatalogo, filtros, formularioDeCatalogo, formularioDePacote } from "./catalogo.js";
 import { uriDoDocumento, uriDoPedido } from "../mcp/server.js";
 import { renderArvore } from "./arvore.js";
@@ -277,6 +277,8 @@ function paginaProjeto(store: Store, projeto: Projeto): string {
     )
     .join("")}
 
+  ${secaoMemorias(store, projeto)}
+
   <section class="bloco">
     <h2>Outros documentos do acervo <span class="contagem">${outrosDoAcervo.filter((documento) => selecionados.has(documento.id)).length} de ${outrosDoAcervo.length}</span></h2>
     <p class="explicacao">Memórias e documentação da área geral que este projeto também usa.</p>
@@ -304,6 +306,55 @@ function paginaProjeto(store: Store, projeto: Projeto): string {
       ),
     },
   });
+}
+
+/**
+ * As memórias do projeto, separadas pelo que espera aprovação.
+ *
+ * O rascunho vem primeiro e destacado: ele é o único que pede uma ação sua, e
+ * memória errada volta em todos os runs futuros do projeto.
+ */
+function secaoMemorias(store: Store, projeto: Projeto): string {
+  const memorias = store.memorias(projeto.id);
+  if (memorias.length === 0) {
+    return `<section class="bloco" id="memoria">
+      <h2>Memória do projeto <span class="contagem">vazia</span></h2>
+      <p class="explicacao">O que os runs aprenderem sobre este projeto aparece aqui — decisões da
+        entrevista, armadilhas que o executor encontrou, e onde o trabalho parou.</p>
+    </section>`;
+  }
+
+  const cartao = (memoria: Documento): string => `<article class="cartao memoria${memoria.status === "rascunho" ? " rascunho" : ""}">
+    <header>
+      <span class="etiqueta">${escapar(memoria.natureza || "memória")}</span>
+      <h3>${escapar(memoria.titulo)}</h3>
+      ${memoria.status === "rascunho" ? '<span class="pendente">rascunho</span>' : ""}
+    </header>
+    <pre class="previa">${escapar(memoria.conteudo.slice(0, 600))}</pre>
+    <div class="acoes">
+      ${memoria.status === "rascunho" ? `<button data-aprovar="${memoria.id}">aprovar</button>` : ""}
+      <span class="procedencia">${escapar(memoria.procedencia)}</span>
+      <button class="discreto perigo" data-remover="${memoria.id}">remover</button>
+    </div>
+  </article>`;
+
+  const pendentes = memorias.filter((memoria) => memoria.status === "rascunho");
+  const ativas = memorias.filter((memoria) => memoria.status !== "rascunho");
+
+  const porNatureza = NATUREZAS.map((natureza) => {
+    const dela = ativas.filter((memoria) => memoria.natureza === natureza.natureza);
+    if (dela.length === 0) return "";
+    return `<h3 class="sub">${escapar(natureza.titulo)} <span class="contagem">${dela.length}</span></h3>
+      ${dela.map(cartao).join("")}`;
+  }).join("");
+
+  return `<section class="bloco" id="memoria">
+    <h2>Memória do projeto <span class="contagem">${ativas.length} ativa(s)${pendentes.length > 0 ? `, ${pendentes.length} aguardando` : ""}</span></h2>
+    <p class="explicacao">É o que permite retomar este projeto com qualquer modelo. Só o que está
+      ativo chega a um run — rascunho existe para ser revisado.</p>
+    ${pendentes.length > 0 ? `<h3 class="sub aguardando">Aguardando sua aprovação <span class="contagem">${pendentes.length}</span></h3>${pendentes.map(cartao).join("")}` : ""}
+    ${porNatureza}
+  </section>`;
 }
 
 /** A rota de uma página, ou `null` quando não existe. */

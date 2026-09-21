@@ -238,6 +238,17 @@ details:not([open]) > summary .icone-pasta-aberta { display: none; }
   border-radius: 9px; padding: 13px 14px;
 }
 .vitrine.adotado { border-color: var(--verde-borda); }
+
+/* O rascunho pede uma ação: ele é a única coisa da tela que espera por você. */
+.cartao.rascunho { border-color: var(--ambar); }
+.pendente {
+  margin-left: auto; font: 500 10px var(--mono); text-transform: uppercase;
+  color: var(--ambar); border: 1px solid #3a2f20; border-radius: 4px; padding: 2px 7px;
+}
+.sub { font-size: 11px; font-weight: 600; color: var(--fraco); margin-top: 6px; display: flex; gap: 8px; align-items: center; }
+.sub.aguardando { color: var(--ambar); }
+.cartao.memoria .acoes { align-items: center; }
+.cartao.memoria .procedencia { margin-left: auto; }
 .vitrine > header { display: flex; align-items: flex-start; gap: 8px; }
 .vitrine h3 { font-size: 13px; font-weight: 600; }
 .categoria {

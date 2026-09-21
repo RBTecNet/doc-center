@@ -102,7 +102,40 @@ export const COLUNAS_NOVAS: { tabela: string; coluna: string; definicao: string 
   { tabela: "documentos", coluna: "area", definicao: `TEXT NOT NULL DEFAULT '${"geral"}'` },
   { tabela: "documentos", coluna: "versao", definicao: "TEXT NOT NULL DEFAULT ''" },
   { tabela: "documentos", coluna: "fonte", definicao: "TEXT NOT NULL DEFAULT ''" },
+  { tabela: "documentos", coluna: "status", definicao: `TEXT NOT NULL DEFAULT '${"ativo"}'` },
+  { tabela: "documentos", coluna: "natureza", definicao: "TEXT NOT NULL DEFAULT ''" },
+  { tabela: "documentos", coluna: "procedencia", definicao: "TEXT NOT NULL DEFAULT ''" },
 ];
+
+/**
+ * As naturezas de uma memória, e como cada uma envelhece.
+ *
+ * As três primeiras ACUMULAM: a lista cresce e isso é bom. `estado` SUBSTITUI —
+ * há um por projeto, reescrito. Memória de estado desatualizada é pior que
+ * nenhuma, porque quem lê acredita nela e trabalha sobre o que já não é verdade.
+ */
+export const NATUREZAS = [
+  { natureza: "decisao", titulo: "Decisões", acumula: true },
+  { natureza: "armadilha", titulo: "Armadilhas", acumula: true },
+  { natureza: "convencao", titulo: "Convenções", acumula: true },
+  { natureza: "estado", titulo: "Estado atual", acumula: false },
+] as const;
+
+export type Natureza = (typeof NATUREZAS)[number]["natureza"];
+
+export function acumula(natureza: string): boolean {
+  return NATUREZAS.find((entrada) => entrada.natureza === natureza)?.acumula ?? true;
+}
+
+/**
+ * O que ainda não valeu.
+ *
+ * Tudo que um agente escreve entra como rascunho: memória errada volta em TODOS
+ * os runs futuros do projeto, e o custo de aprovar é um clique enquanto o custo
+ * de não revisar se paga em cada execução seguinte.
+ */
+export const STATUS = ["ativo", "rascunho"] as const;
+export type Status = (typeof STATUS)[number];
 
 /**
  * Onde o projeto escolhe em vez de escrever.
@@ -213,6 +246,12 @@ export interface Documento {
   restricoes: string;
   /** Onde a skill se aplica. É o que decide em que fase ela entra. */
   area: string;
+  /** `ativo` ou `rascunho`: o que um agente escreveu espera aprovação. */
+  status: string;
+  /** Para memórias: decisao, armadilha, convencao ou estado. */
+  natureza: string;
+  /** De onde veio: o run e a fase que a produziram. */
+  procedencia: string;
   /** Procedência, quando o pacote a declara. */
   versao: string;
   fonte: string;

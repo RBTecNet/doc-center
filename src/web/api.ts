@@ -230,6 +230,12 @@ export async function rotaApi(store: Store, req: IncomingMessage, res: ServerRes
         });
         return;
       }
+      if (metodo === "POST" && partes[3] === "aprovar") {
+        store.aprovar(id);
+        responderJson(res, 200, { documento: store.documentoPorId(id) });
+        return;
+      }
+
       if (metodo === "DELETE") {
         store.removerDocumento(id);
         responderJson(res, 200, { removido: id });
