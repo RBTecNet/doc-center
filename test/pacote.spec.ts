@@ -259,6 +259,23 @@ describe("importar e servir o pacote", () => {
     expect(imagem.result.contents[0].text).toBeUndefined();
   });
 
+  /*
+   * O harness lê a área daqui para escolher em que fase a skill entra. É dado,
+   * não prosa: o marcador precisa ser estável, e já custou uma seleção inteira
+   * quando era "área" com acento.
+   */
+  it("a descrição do recurso carrega a área em formato legível por máquina", async () => {
+    const { dado } = await pedir("POST", "/api/documentos/importar", {
+      zip: zipDaSkill().toString("base64"),
+      area: "frontend",
+    });
+    await pedir("POST", `/api/projetos/biblioteca/selecoes/${dado.documento.id}`);
+
+    const lista = (await rpc("resources/list")).result.resources as { uri: string; description: string }[];
+    const base = lista.find((recurso) => recurso.uri === "capivara://biblioteca/docs/skill/frontend-design");
+    expect(base?.description).toContain("area=frontend");
+  });
+
   it("arquivo que não existe no pacote é recusado com o caminho", async () => {
     const { dado } = await pedir("POST", "/api/documentos/importar", { zip: zipDaSkill().toString("base64") });
     await pedir("POST", `/api/projetos/biblioteca/selecoes/${dado.documento.id}`);

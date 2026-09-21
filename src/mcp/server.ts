@@ -123,7 +123,10 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
           recursos.push({
             uri: uriDoDocumento(projeto.slug, documento),
             name: documento.titulo,
-            description: `${documento.tipo} · área ${documento.area} · usado pelo projeto ${projeto.nome}`,
+            // `area=` sem acento e sem espaço: é dado para o cliente ler, não
+            // prosa. Acento aqui já custou uma seleção de skills inteira, porque
+            // `\b` antes de caractere acentuado não casa em JavaScript.
+            description: `${documento.tipo} · area=${documento.area} · usado pelo projeto ${projeto.nome}`,
             mimeType: "text/markdown",
           });
           // Os arquivos do pacote entram como recursos próprios: é assim que o
