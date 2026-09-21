@@ -11,6 +11,7 @@ import type { Store } from "../db/store.js";
 import { responderJson } from "../http.js";
 import { lerPacote } from "../skill.js";
 import { lerZip, pareceTexto } from "../zip.js";
+import { exportarProjeto, importarProjeto } from "../projeto-zip.js";
 
 async function corpoJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   const partes: Buffer[] = [];
@@ -33,6 +34,22 @@ export async function rotaApi(store: Store, req: IncomingMessage, res: ServerRes
 
     if (metodo === "GET" && !slug) {
       responderJson(res, 200, { projetos: store.listarProjetos() });
+      return;
+    }
+
+    /*
+     * Importar um projeto inteiro. É o outro lado do zip de exportação, e é o
+     * que torna o material compartilhável: outra pessoa recebe o mesmo acervo
+     * sem precisar do nosso servidor.
+     */
+    if (metodo === "POST" && slug === "importar") {
+      const dados = await corpoJson(req);
+      const bruto = Buffer.from(texto(dados.zip), "base64");
+      if (bruto.length === 0) {
+        responderJson(res, 400, { erro: "envie o zip do projeto em `zip`, codificado em base64" });
+        return;
+      }
+      responderJson(res, 201, importarProjeto(store, bruto, texto(dados.slug)));
       return;
     }
 
@@ -80,6 +97,21 @@ export async function rotaApi(store: Store, req: IncomingMessage, res: ServerRes
       if (metodo === "DELETE" && partes[3] === undefined) {
         store.removerProjeto(slug);
         responderJson(res, 200, { removido: slug });
+        return;
+      }
+
+      /*
+       * O zip do projeto, na mesma estrutura que o harness materializa: jogue
+       * numa pasta, rode o capivara, funciona — com ou sem esta base de pé.
+       */
+      if (metodo === "GET" && partes[3] === "zip") {
+        const pacote = exportarProjeto(store, projeto);
+        res.writeHead(200, {
+          "content-type": "application/zip",
+          "content-disposition": `attachment; filename="${projeto.slug}.zip"`,
+          "content-length": pacote.zip.length,
+        });
+        res.end(pacote.zip);
         return;
       }
 

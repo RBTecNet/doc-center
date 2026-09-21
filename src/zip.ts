@@ -11,7 +11,8 @@
  * tem os números certos — é para isso que ele existe.
  */
 
-import { inflateRawSync } from "node:zlib";
+import { crc32 } from "node:zlib";
+import { deflateRawSync, inflateRawSync } from "node:zlib";
 
 export interface ArquivoDoZip {
   /** Caminho relativo dentro do pacote, com barras normais. */
@@ -145,4 +146,65 @@ export function pareceTexto(conteudo: Buffer): boolean {
 
   // E o texto precisa ser UTF-8 válido: ida e volta preserva os bytes.
   return Buffer.compare(Buffer.from(amostra.toString("utf8"), "utf8"), amostra) === 0;
+}
+
+/**
+ * Escreve um zip.
+ *
+ * O mesmo formato que lemos, na direção contrária: cabeçalho local por arquivo,
+ * diretório central no fim e o registro de fim depois dele. O CRC é calculado de
+ * verdade — quem abrir este zip com qualquer outra ferramenta vai conferi-lo, e
+ * um CRC errado faz o arquivo parecer corrompido mesmo estando íntegro.
+ */
+export function escreverZip(arquivos: readonly ArquivoDoZip[]): Buffer {
+  const locais: Buffer[] = [];
+  const centrais: Buffer[] = [];
+  let deslocamento = 0;
+
+  for (const arquivo of arquivos) {
+    const nome = Buffer.from(arquivo.caminho, "utf8");
+    const comprimido = deflateRawSync(arquivo.conteudo);
+
+    /*
+     * Comprimir nem sempre encolhe: texto minúsculo e imagem já comprimida
+     * saem maiores. Guardar o maior dos dois seria pagar para piorar.
+     */
+    const usarDeflate = comprimido.length < arquivo.conteudo.length;
+    const dados = usarDeflate ? comprimido : arquivo.conteudo;
+    const soma = crc32(arquivo.conteudo);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(usarDeflate ? 8 : 0, 8);
+    local.writeUInt32LE(soma, 14);
+    local.writeUInt32LE(dados.length, 18);
+    local.writeUInt32LE(arquivo.conteudo.length, 22);
+    local.writeUInt16LE(nome.length, 26);
+    locais.push(local, nome, dados);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(usarDeflate ? 8 : 0, 10);
+    central.writeUInt32LE(soma, 16);
+    central.writeUInt32LE(dados.length, 20);
+    central.writeUInt32LE(arquivo.conteudo.length, 24);
+    central.writeUInt16LE(nome.length, 28);
+    central.writeUInt32LE(deslocamento, 42);
+    centrais.push(central, nome);
+
+    deslocamento += 30 + nome.length + dados.length;
+  }
+
+  const corpoCentral = Buffer.concat(centrais);
+  const fim = Buffer.alloc(22);
+  fim.writeUInt32LE(FIM_DO_DIRETORIO, 0);
+  fim.writeUInt16LE(arquivos.length, 8);
+  fim.writeUInt16LE(arquivos.length, 10);
+  fim.writeUInt32LE(corpoCentral.length, 12);
+  fim.writeUInt32LE(deslocamento, 16);
+
+  return Buffer.concat([...locais, corpoCentral, fim]);
 }

@@ -115,11 +115,18 @@ export const COLUNAS_NOVAS: { tabela: string; coluna: string; definicao: string 
  * nenhuma, porque quem lê acredita nela e trabalha sobre o que já não é verdade.
  */
 export const NATUREZAS = [
-  { natureza: "decisao", titulo: "Decisões", acumula: true },
-  { natureza: "armadilha", titulo: "Armadilhas", acumula: true },
-  { natureza: "convencao", titulo: "Convenções", acumula: true },
-  { natureza: "estado", titulo: "Estado atual", acumula: false },
+  // `pasta` é escrita, não derivada: "decisao" + "s" dá "decisaos", e o zip é o
+  // que alguém abre para ler sem nenhuma ferramenta nossa.
+  { natureza: "decisao", titulo: "Decisões", pasta: "decisoes", acumula: true },
+  { natureza: "armadilha", titulo: "Armadilhas", pasta: "armadilhas", acumula: true },
+  { natureza: "convencao", titulo: "Convenções", pasta: "convencoes", acumula: true },
+  { natureza: "estado", titulo: "Estado atual", pasta: "", acumula: false },
 ] as const;
+
+/** A pasta de uma natureza dentro de `memoria/`. */
+export function pastaDaNatureza(natureza: string): string {
+  return NATUREZAS.find((entrada) => entrada.natureza === natureza)?.pasta ?? "decisoes";
+}
 
 export type Natureza = (typeof NATUREZAS)[number]["natureza"];
 
