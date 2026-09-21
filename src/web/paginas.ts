@@ -14,7 +14,7 @@
 import type { Store } from "../db/store.js";
 import type { Documento, Projeto } from "../db/schema.js";
 import { conteineresPara, ehDeCatalogo } from "../db/schema.js";
-import { cartaoDeCatalogo, filtros, formularioDeCatalogo } from "./catalogo.js";
+import { cartaoDeCatalogo, filtros, formularioDeCatalogo, formularioDePacote } from "./catalogo.js";
 import { uriDoDocumento, uriDoPedido } from "../mcp/server.js";
 import { renderArvore } from "./arvore.js";
 import { escapar } from "./escapar.js";
@@ -209,7 +209,10 @@ function paginaGeral(store: Store): string {
       const doTipo = documentos.filter((documento) => documento.tipo === tipo.tipo);
       return `<section class="bloco" id="c-${escapar(tipo.tipo)}">
         <h2>${escapar(tipo.titulo)} <span class="contagem">${doTipo.length}</span></h2>
-        ${formularioDeCatalogo(tipo.tipo, singularDe(tipo.tipo))}
+        <div class="linha-acoes">
+          ${formularioDeCatalogo(tipo.tipo, singularDe(tipo.tipo))}
+          ${tipo.tipo === "skill" ? formularioDePacote(tipo.tipo) : ""}
+        </div>
         ${doTipo.length === 0 ? `<p class="vazio">O catálogo de ${escapar(tipo.titulo.toLowerCase())} está vazio.</p>` : ""}
         ${doTipo.length > 0 ? filtros(store.categorias(tipo.tipo), doTipo.length) : ""}
         <div class="vitrines">${doTipo.map((documento) => cartaoDeCatalogo(documento)).join("")}</div>

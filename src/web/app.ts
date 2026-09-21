@@ -194,3 +194,59 @@ for (const secao of document.querySelectorAll<HTMLElement>(".bloco")) {
     });
   }
 }
+
+/*
+ * Importar pacote.
+ *
+ * O arquivo vira base64 e sobe pela mesma API JSON do resto — um caminho de
+ * upload multipart só para isto seria um segundo jeito de falar com a mesma
+ * porta, e os dois divergiriam no dia em que uma regra mudasse.
+ */
+for (const formulario of document.querySelectorAll<HTMLFormElement>("form[data-pacote]")) {
+  formulario.addEventListener("submit", async (evento) => {
+    evento.preventDefault();
+
+    const campo = formulario.querySelector<HTMLInputElement>('input[type="file"]');
+    const arquivo = campo?.files?.[0];
+    if (!arquivo) {
+      alert("escolha o arquivo .zip da skill");
+      return;
+    }
+
+    const botao = formulario.querySelector("button");
+    if (botao) {
+      botao.disabled = true;
+      botao.textContent = "importando…";
+    }
+
+    const bytes = new Uint8Array(await arquivo.arrayBuffer());
+    let binario = "";
+    for (let inicio = 0; inicio < bytes.length; inicio += 0x8000) {
+      binario += String.fromCharCode(...bytes.subarray(inicio, inicio + 0x8000));
+    }
+
+    const dados = Object.fromEntries(new FormData(formulario).entries());
+    const resposta = await json("POST", "/api/documentos/importar", {
+      ...dados,
+      zip: btoa(binario),
+      tipo: formulario.dataset.tipo ?? "skill",
+    });
+
+    if (!resposta.ok) {
+      if (botao) {
+        botao.disabled = false;
+        botao.textContent = "importar";
+      }
+      await avisar(resposta);
+      return;
+    }
+
+    // Executável no pacote não impede nada, mas quem importou precisa saber: o
+    // pacote vai ser materializado dentro do projeto.
+    const corpo = (await resposta.json()) as { executaveis?: string[] };
+    if (corpo.executaveis && corpo.executaveis.length > 0) {
+      alert(`Importado. O pacote traz executável:\n\n${corpo.executaveis.join("\n")}`);
+    }
+    location.reload();
+  });
+}

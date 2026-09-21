@@ -66,6 +66,25 @@ CREATE TABLE IF NOT EXISTS selecoes (
 );
 
 CREATE INDEX IF NOT EXISTS documentos_por_projeto ON documentos (projeto_id);
+
+-- Os arquivos que acompanham um documento: as referências de uma skill, os
+-- prints, o que vier no pacote. O SKILL.md continua no "conteudo" do documento,
+-- porque é a base — o que entra no prompt e o que a vitrine descreve.
+CREATE TABLE IF NOT EXISTS arquivos (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  documento_id INTEGER NOT NULL REFERENCES documentos(id) ON DELETE CASCADE,
+  -- Relativo à raiz do pacote: "references/typography.md". É este caminho que o
+  -- SKILL.md cita, e é com ele que o harness materializa no disco.
+  caminho      TEXT NOT NULL,
+  conteudo     BLOB NOT NULL,
+  -- Binário é guardado como veio e nunca convertido para texto: um print de
+  -- interface é a melhor referência de layout que existe, e vira lixo se passar
+  -- por uma conversão de codificação.
+  binario      INTEGER NOT NULL DEFAULT 0,
+  criado_em    TEXT NOT NULL
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS arquivos_unicos ON arquivos (documento_id, caminho);
 `;
 
 /**
@@ -80,6 +99,9 @@ export const COLUNAS_NOVAS: { tabela: string; coluna: string; definicao: string 
   { tabela: "documentos", coluna: "categoria", definicao: "TEXT NOT NULL DEFAULT ''" },
   { tabela: "documentos", coluna: "gatilhos", definicao: "TEXT NOT NULL DEFAULT ''" },
   { tabela: "documentos", coluna: "restricoes", definicao: "TEXT NOT NULL DEFAULT ''" },
+  { tabela: "documentos", coluna: "area", definicao: `TEXT NOT NULL DEFAULT '${"geral"}'` },
+  { tabela: "documentos", coluna: "versao", definicao: "TEXT NOT NULL DEFAULT ''" },
+  { tabela: "documentos", coluna: "fonte", definicao: "TEXT NOT NULL DEFAULT ''" },
 ];
 
 /**
@@ -98,6 +120,21 @@ export function ehDeCatalogo(tipo: string): boolean {
 
 /** O rótulo de quem não declarou categoria. */
 export const SEM_CATEGORIA = "Sem categoria";
+
+/**
+ * As áreas, fechadas dos dois lados.
+ *
+ * A skill declara a sua; a fase declara as dela; o harness cruza. Lista fechada
+ * porque lista aberta vira texto livre, e casar texto livre é onde defeito
+ * silencioso mora — uma skill de frontend carregada numa fase de banco é
+ * contexto pago que compete com o que importa.
+ */
+export const AREAS = ["frontend", "backend", "dados", "infra", "qualidade", "geral"] as const;
+export type Area = (typeof AREAS)[number];
+
+export function areaValida(valor: string): Area {
+  return (AREAS as readonly string[]).includes(valor) ? (valor as Area) : "geral";
+}
 
 /**
  * Os contêineres de um projeto — e da área geral.
@@ -154,6 +191,14 @@ export interface Projeto {
   alteradoEm: string;
 }
 
+export interface ArquivoDoDocumento {
+  id: number;
+  caminho: string;
+  binario: boolean;
+  /** Tamanho em bytes. O conteúdo só é lido quando alguém o pede. */
+  tamanho: number;
+}
+
 export interface Documento {
   id: number;
   projetoId: number | null;
@@ -166,6 +211,13 @@ export interface Documento {
   categoria: string;
   gatilhos: string;
   restricoes: string;
+  /** Onde a skill se aplica. É o que decide em que fase ela entra. */
+  area: string;
+  /** Procedência, quando o pacote a declara. */
+  versao: string;
+  fonte: string;
+  /** Os arquivos que acompanham; vazio quando o documento é só texto. */
+  arquivos?: ArquivoDoDocumento[];
   criadoEm: string;
   alteradoEm: string;
 }

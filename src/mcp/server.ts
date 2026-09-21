@@ -53,8 +53,17 @@ export function uriDoDocumento(escopo: string, documento: Documento): string {
   return `capivara://${escopo}/docs/${documento.tipo}/${documento.slug}`;
 }
 
-/** `capivara://x/docs/memoria/estilo` → escopo `x`, tipo `memoria`, slug `estilo`. */
-export function lerUri(uri: string): { escopo: string; tipo: string; slug: string; pedido: boolean } | null {
+/**
+ * `capivara://x/docs/memoria/estilo` → escopo `x`, tipo `memoria`, slug `estilo`.
+ *
+ * Um pacote acrescenta um nível: tudo depois do slug é o caminho do arquivo
+ * dentro dele — `capivara://x/docs/skill/frontend/references/typography.md`. É o
+ * mesmo caminho que o SKILL.md cita e que o harness materializa no disco, então
+ * ele viaja inteiro, com as barras.
+ */
+export function lerUri(
+  uri: string,
+): { escopo: string; tipo: string; slug: string; pedido: boolean; arquivo: string } | null {
   const resto = uri.startsWith("capivara://") ? uri.slice("capivara://".length) : "";
   if (resto === "") return null;
 
@@ -62,9 +71,15 @@ export function lerUri(uri: string): { escopo: string; tipo: string; slug: strin
   const escopo = partes[0] ?? "";
   if (escopo === "") return null;
 
-  if (partes.length === 2 && partes[1] === "pedido") return { escopo, tipo: "", slug: "", pedido: true };
-  if (partes.length === 4 && partes[1] === "docs") {
-    return { escopo, tipo: partes[2] ?? "", slug: partes[3] ?? "", pedido: false };
+  if (partes.length === 2 && partes[1] === "pedido") return { escopo, tipo: "", slug: "", pedido: true, arquivo: "" };
+  if (partes.length >= 4 && partes[1] === "docs") {
+    return {
+      escopo,
+      tipo: partes[2] ?? "",
+      slug: partes[3] ?? "",
+      pedido: false,
+      arquivo: partes.slice(4).join("/"),
+    };
   }
   return null;
 }
@@ -108,9 +123,19 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
           recursos.push({
             uri: uriDoDocumento(projeto.slug, documento),
             name: documento.titulo,
-            description: `${documento.tipo} usado pelo projeto ${projeto.nome}`,
+            description: `${documento.tipo} · área ${documento.area} · usado pelo projeto ${projeto.nome}`,
             mimeType: "text/markdown",
           });
+          // Os arquivos do pacote entram como recursos próprios: é assim que o
+          // harness sabe o que materializar sem adivinhar.
+          for (const arquivo of store.arquivos(documento.id)) {
+            recursos.push({
+              uri: `${uriDoDocumento(projeto.slug, documento)}/${arquivo.caminho}`,
+              name: `${documento.titulo} · ${arquivo.caminho}`,
+              description: arquivo.binario ? "arquivo binário do pacote" : "arquivo do pacote",
+              mimeType: arquivo.binario ? "application/octet-stream" : "text/markdown",
+            });
+          }
         }
       }
 
@@ -140,7 +165,15 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
       if (alvo.escopo === "geral") {
         const documento = store.documento(null, alvo.tipo, alvo.slug);
         if (!documento) return recusar(PARAMETRO_INVALIDO, `documento não existe na área geral: ${uri}`);
-        return responder(texto(documento.conteudo, uri));
+        if (alvo.arquivo === "") return responder(texto(documento.conteudo, uri));
+
+        const arquivo = store.arquivo(documento.id, alvo.arquivo);
+        if (!arquivo) return recusar(PARAMETRO_INVALIDO, `${alvo.tipo}/${alvo.slug} não tem o arquivo ${alvo.arquivo}`);
+        return responder(
+          arquivo.binario
+            ? { contents: [{ uri, mimeType: "application/octet-stream", blob: arquivo.conteudo.toString("base64") }] }
+            : texto(arquivo.conteudo.toString("utf8"), uri),
+        );
       }
 
       const projeto = store.projetoPorSlug(alvo.escopo);
@@ -153,7 +186,17 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
        */
       const usado = store.listarDoProjeto(projeto.id).find((doc) => doc.tipo === alvo.tipo && doc.slug === alvo.slug);
       if (!usado) return recusar(PARAMETRO_INVALIDO, `o projeto ${projeto.slug} não usa ${alvo.tipo}/${alvo.slug}`);
-      return responder(texto(usado.conteudo, uri));
+      if (alvo.arquivo === "") return responder(texto(usado.conteudo, uri));
+
+      const arquivo = store.arquivo(usado.id, alvo.arquivo);
+      if (!arquivo) return recusar(PARAMETRO_INVALIDO, `${alvo.tipo}/${alvo.slug} não tem o arquivo ${alvo.arquivo}`);
+      // Binário viaja em base64, como o protocolo prevê: convertê-lo para texto
+      // destruiria justamente o print que alguém guardou para servir de referência.
+      return responder(
+        arquivo.binario
+          ? { contents: [{ uri, mimeType: "application/octet-stream", blob: arquivo.conteudo.toString("base64") }] }
+          : texto(arquivo.conteudo.toString("utf8"), uri),
+      );
     }
 
     case "prompts/list":

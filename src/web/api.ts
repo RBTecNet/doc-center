@@ -9,6 +9,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Store } from "../db/store.js";
 import { responderJson } from "../http.js";
+import { lerPacote } from "../skill.js";
+import { lerZip, pareceTexto } from "../zip.js";
 
 async function corpoJson(req: IncomingMessage): Promise<Record<string, unknown>> {
   const partes: Buffer[] = [];
@@ -120,6 +122,63 @@ export async function rotaApi(store: Store, req: IncomingMessage, res: ServerRes
       return;
     }
 
+    /*
+     * Importar um pacote.
+     *
+     * O zip chega em base64 porque a interface o envia por JSON como todo o
+     * resto — um caminho de upload multipart só para isto seria um segundo jeito
+     * de falar com a mesma API.
+     */
+    if (metodo === "POST" && partes[2] === "importar") {
+      const dados = await corpoJson(req);
+      const projetoSlug = texto(dados.projeto);
+      const projeto = projetoSlug ? store.projetoPorSlug(projetoSlug) : null;
+      if (projetoSlug && !projeto) {
+        responderJson(res, 404, { erro: `projeto "${projetoSlug}" não existe` });
+        return;
+      }
+
+      const bruto = Buffer.from(texto(dados.zip), "base64");
+      if (bruto.length === 0) {
+        responderJson(res, 400, { erro: "envie o pacote em `zip`, codificado em base64" });
+        return;
+      }
+
+      const pacote = lerPacote(lerZip(bruto));
+
+      const documento = store.criarDocumento({
+        projetoId: projeto ? projeto.id : null,
+        tipo: texto(dados.tipo) || "skill",
+        // O frontmatter manda no cartão; o formulário só complementa o que ele
+        // não disse. Quem escreveu a skill já descreveu a skill.
+        titulo: pacote.frontmatter.nome || texto(dados.titulo) || pacote.entrada,
+        conteudo: pacote.corpo,
+        descricao: pacote.frontmatter.descricao || texto(dados.descricao),
+        gatilhos: pacote.frontmatter.gatilhos || texto(dados.gatilhos),
+        restricoes: pacote.frontmatter.restricoes || texto(dados.restricoes),
+        categoria: texto(dados.categoria),
+        area: texto(dados.area) || "geral",
+        versao: pacote.frontmatter.versao,
+        fonte: pacote.frontmatter.fonte,
+        arquivos: pacote.arquivos.map((arquivo) => ({
+          caminho: arquivo.caminho,
+          conteudo: arquivo.conteudo,
+          binario: !pareceTexto(arquivo.conteudo),
+        })),
+      });
+
+      responderJson(res, 201, {
+        documento: store.documentoPorId(documento.id),
+        // Executável no pacote não impede a importação; quem importou precisa
+        // saber o que entrou, porque isso vai ser materializado no projeto.
+        executaveis: pacote.arquivos
+          .filter((arquivo) => /\.(sh|bash|zsh|py|rb|pl|ps1|bat|cmd)$/i.test(arquivo.caminho))
+          .map((arquivo) => arquivo.caminho),
+        base: pacote.entrada,
+      });
+      return;
+    }
+
     if (metodo === "POST" && !partes[2]) {
       const dados = await corpoJson(req);
       const projetoSlug = texto(dados.projeto);
@@ -140,6 +199,7 @@ export async function rotaApi(store: Store, req: IncomingMessage, res: ServerRes
         categoria: texto(dados.categoria),
         gatilhos: texto(dados.gatilhos),
         restricoes: texto(dados.restricoes),
+        area: texto(dados.area) || "geral",
       });
       responderJson(res, 201, { documento });
       return;
@@ -165,6 +225,7 @@ export async function rotaApi(store: Store, req: IncomingMessage, res: ServerRes
             ...(typeof dados.categoria === "string" ? { categoria: dados.categoria } : {}),
             ...(typeof dados.gatilhos === "string" ? { gatilhos: dados.gatilhos } : {}),
             ...(typeof dados.restricoes === "string" ? { restricoes: dados.restricoes } : {}),
+            ...(typeof dados.area === "string" ? { area: dados.area } : {}),
           }),
         });
         return;

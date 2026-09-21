@@ -246,6 +246,29 @@ details:not([open]) > summary .icone-pasta-aberta { display: none; }
   color: var(--ambar); border: 1px solid #3a2f20; border-radius: 999px; padding: 2px 8px;
 }
 .vitrine .descricao { font-size: 12.5px; color: var(--texto-3); }
+
+/* A área decide em que fase a skill entra: ela precisa ser lida de relance. */
+.area {
+  flex: none; font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .05em;
+  padding: 2px 7px; border-radius: 4px;
+  background: var(--verde-fundo); color: var(--verde-claro); border: 1px solid var(--verde-borda);
+}
+.area-geral { background: transparent; color: var(--fraco); border-color: var(--borda-forte); }
+
+.pacote > summary {
+  cursor: pointer; font: 11px var(--mono); color: var(--fraco);
+  list-style: none; padding: 4px 0;
+}
+.pacote > summary::-webkit-details-marker { display: none; }
+.pacote ul { list-style: none; display: flex; flex-direction: column; gap: 3px; padding: 4px 0 0; }
+.pacote li { display: flex; align-items: center; gap: 7px; }
+.pacote code { font: 10.5px var(--mono); color: var(--texto-3); }
+.binario { font: 9px var(--mono); text-transform: uppercase; color: var(--ambar); }
+
+.procedencia { display: flex; gap: 8px; font: 10px var(--mono); color: var(--apagado); }
+.procedencia a { color: var(--fraco); }
+
+input[type="file"] { padding: 6px; font: 11.5px var(--mono); }
 .vitrine .sem-descricao { font-size: 12px; color: var(--apagado); font-style: italic; }
 
 .faixa { display: flex; gap: 7px; font-size: 11.5px; color: var(--fraco); }

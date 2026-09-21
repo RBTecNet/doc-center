@@ -10,7 +10,7 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
-import { COLUNAS_NOVAS, SCHEMA, SEM_CATEGORIA, comoSlug, type Documento, type Projeto } from "./schema.js";
+import { COLUNAS_NOVAS, SCHEMA, SEM_CATEGORIA, areaValida, comoSlug, type ArquivoDoDocumento, type Documento, type Projeto } from "./schema.js";
 
 /**
  * Erro de quem usou, não do servidor.
@@ -53,8 +53,20 @@ interface LinhaDocumento {
   categoria: string;
   gatilhos: string;
   restricoes: string;
+  area: string;
+  versao: string;
+  fonte: string;
   criado_em: string;
   alterado_em: string;
+}
+
+interface LinhaArquivo {
+  id: number;
+  documento_id: number;
+  caminho: string;
+  conteudo: Buffer | Uint8Array;
+  binario: number;
+  criado_em: string;
 }
 
 const comoProjeto = (linha: LinhaProjeto): Projeto => ({
@@ -78,6 +90,9 @@ const comoDocumento = (linha: LinhaDocumento): Documento => ({
   categoria: linha.categoria ?? "",
   gatilhos: linha.gatilhos ?? "",
   restricoes: linha.restricoes ?? "",
+  area: linha.area ?? "geral",
+  versao: linha.versao ?? "",
+  fonte: linha.fonte ?? "",
   criadoEm: linha.criado_em,
   alteradoEm: linha.alterado_em,
 });
@@ -195,7 +210,10 @@ export class Store {
 
   documentoPorId(id: number): Documento | null {
     const linha = this.db.prepare("SELECT * FROM documentos WHERE id = ?").get(id) as unknown as LinhaDocumento | undefined;
-    return linha ? comoDocumento(linha) : null;
+    if (!linha) return null;
+    const documento = comoDocumento(linha);
+    const arquivos = this.arquivos(documento.id);
+    return arquivos.length > 0 ? { ...documento, arquivos } : documento;
   }
 
   criarDocumento(entrada: {
@@ -208,6 +226,11 @@ export class Store {
     categoria?: string;
     gatilhos?: string;
     restricoes?: string;
+    area?: string;
+    versao?: string;
+    fonte?: string;
+    /** Os arquivos que acompanham a base, quando o documento veio de um pacote. */
+    arquivos?: { caminho: string; conteudo: Buffer; binario: boolean }[];
   }): Documento {
     const slug = comoSlug(entrada.slug || entrada.titulo);
     if (slug === "") throw new ErroDeUso("o documento precisa de um título que vire slug");
@@ -220,8 +243,8 @@ export class Store {
     const instante = this.agora();
     this.db
       .prepare(
-        "INSERT INTO documentos (projeto_id, tipo, slug, titulo, conteudo, descricao, categoria, gatilhos, restricoes, criado_em, alterado_em)" +
-          " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO documentos (projeto_id, tipo, slug, titulo, conteudo, descricao, categoria, gatilhos, restricoes, area, versao, fonte, criado_em, alterado_em)" +
+          " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         projetoId,
@@ -233,22 +256,36 @@ export class Store {
         entrada.categoria ?? "",
         entrada.gatilhos ?? "",
         entrada.restricoes ?? "",
+        areaValida(entrada.area ?? "geral"),
+        entrada.versao ?? "",
+        entrada.fonte ?? "",
         instante,
         instante,
       );
-    return this.documento(projetoId, entrada.tipo, slug)!;
+
+    const criado = this.documento(projetoId, entrada.tipo, slug)!;
+    for (const arquivo of entrada.arquivos ?? []) this.gravarArquivo(criado.id, arquivo);
+    return criado;
   }
 
   atualizarDocumento(
     id: number,
-    campos: { titulo?: string; conteudo?: string; descricao?: string; categoria?: string; gatilhos?: string; restricoes?: string },
+    campos: {
+      titulo?: string;
+      conteudo?: string;
+      descricao?: string;
+      categoria?: string;
+      gatilhos?: string;
+      restricoes?: string;
+      area?: string;
+    },
   ): Documento {
     const atual = this.documentoPorId(id);
     if (!atual) throw new ErroDeUso(`documento ${id} não existe`);
 
     this.db
       .prepare(
-        "UPDATE documentos SET titulo = ?, conteudo = ?, descricao = ?, categoria = ?, gatilhos = ?, restricoes = ?, alterado_em = ? WHERE id = ?",
+        "UPDATE documentos SET titulo = ?, conteudo = ?, descricao = ?, categoria = ?, gatilhos = ?, restricoes = ?, area = ?, alterado_em = ? WHERE id = ?",
       )
       .run(
         campos.titulo ?? atual.titulo,
@@ -257,6 +294,7 @@ export class Store {
         campos.categoria ?? atual.categoria,
         campos.gatilhos ?? atual.gatilhos,
         campos.restricoes ?? atual.restricoes,
+        campos.area === undefined ? atual.area : areaValida(campos.area),
         this.agora(),
         id,
       );
@@ -282,6 +320,43 @@ export class Store {
 
   removerDocumento(id: number): void {
     this.db.prepare("DELETE FROM documentos WHERE id = ?").run(id);
+  }
+
+  // ---------------------------------------------------------------- arquivos
+
+  /**
+   * Grava um arquivo do pacote.
+   *
+   * Reimportar a mesma skill substitui o arquivo em vez de duplicá-lo: o par
+   * documento + caminho é único, e uma skill atualizada é a mesma skill.
+   */
+  gravarArquivo(documentoId: number, arquivo: { caminho: string; conteudo: Buffer; binario: boolean }): void {
+    this.db
+      .prepare(
+        "INSERT INTO arquivos (documento_id, caminho, conteudo, binario, criado_em) VALUES (?, ?, ?, ?, ?)" +
+          " ON CONFLICT (documento_id, caminho) DO UPDATE SET conteudo = excluded.conteudo, binario = excluded.binario",
+      )
+      .run(documentoId, arquivo.caminho, arquivo.conteudo, arquivo.binario ? 1 : 0, this.agora());
+  }
+
+  /** Os arquivos de um documento, sem o conteúdo: listar não precisa carregar. */
+  arquivos(documentoId: number): ArquivoDoDocumento[] {
+    const linhas = this.db
+      .prepare("SELECT id, caminho, binario, LENGTH(conteudo) AS tamanho FROM arquivos WHERE documento_id = ? ORDER BY caminho")
+      .all(documentoId) as unknown as { id: number; caminho: string; binario: number; tamanho: number }[];
+    return linhas.map((linha) => ({ id: linha.id, caminho: linha.caminho, binario: linha.binario === 1, tamanho: linha.tamanho }));
+  }
+
+  /** O conteúdo de um arquivo, pelo caminho. Nulo quando não existe. */
+  arquivo(documentoId: number, caminho: string): { conteudo: Buffer; binario: boolean } | null {
+    const linha = this.db
+      .prepare("SELECT conteudo, binario FROM arquivos WHERE documento_id = ? AND caminho = ?")
+      .get(documentoId, caminho) as unknown as { conteudo: Buffer | Uint8Array; binario: number } | undefined;
+    return linha ? { conteudo: Buffer.from(linha.conteudo), binario: linha.binario === 1 } : null;
+  }
+
+  removerArquivos(documentoId: number): void {
+    this.db.prepare("DELETE FROM arquivos WHERE documento_id = ?").run(documentoId);
   }
 
   // ---------------------------------------------------------------- seleções

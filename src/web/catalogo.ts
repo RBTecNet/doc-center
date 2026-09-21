@@ -13,7 +13,7 @@
  */
 
 import type { Documento } from "../db/schema.js";
-import { SEM_CATEGORIA } from "../db/schema.js";
+import { AREAS, SEM_CATEGORIA } from "../db/schema.js";
 import { escapar } from "./escapar.js";
 import { MAIS_SVG } from "./tema.js";
 
@@ -42,16 +42,37 @@ export function cartaoDeCatalogo(documento: Documento, adocao: OpcaoDeAdocao = {
     : `<button class="discreto" data-editar="${documento.id}">editar</button>
        <button class="discreto perigo" data-remover="${documento.id}">remover</button>`;
 
+  const pacote = documento.arquivos ?? [];
+  const arquivos =
+    pacote.length === 0
+      ? ""
+      : `<details class="pacote"><summary>${pacote.length} arquivo(s) no pacote</summary>
+         <ul>${pacote
+           .map(
+             (arquivo) =>
+               `<li><code>${escapar(arquivo.caminho)}</code>${arquivo.binario ? '<span class="binario">binário</span>' : ""}</li>`,
+           )
+           .join("")}</ul></details>`;
+
+  const procedencia =
+    documento.versao || documento.fonte
+      ? `<div class="procedencia">${escapar(documento.versao ? `v${documento.versao}` : "")}
+         ${documento.fonte ? `<a href="${escapar(documento.fonte)}" target="_blank" rel="noreferrer">origem</a>` : ""}</div>`
+      : "";
+
   return `<article class="vitrine${adocao.adotado ? " adotado" : ""}" data-id="${documento.id}"
     data-categoria="${escapar(categoriaDe(documento))}"
-    data-busca="${escapar(`${documento.titulo} ${documento.descricao} ${documento.gatilhos} ${categoriaDe(documento)}`.toLowerCase())}">
+    data-busca="${escapar(`${documento.titulo} ${documento.descricao} ${documento.gatilhos} ${categoriaDe(documento)} ${documento.area}`.toLowerCase())}">
   <header>
     <h3>${escapar(documento.titulo)}</h3>
+    <span class="area area-${escapar(documento.area)}">${escapar(documento.area)}</span>
     <span class="categoria">${escapar(categoriaDe(documento))}</span>
   </header>
   ${documento.descricao.trim() === "" ? '<p class="sem-descricao">sem descrição</p>' : `<p class="descricao">${escapar(documento.descricao)}</p>`}
   ${faixa("usar quando", documento.gatilhos, "usar")}
   ${faixa("não usar para", documento.restricoes, "evitar")}
+  ${arquivos}
+  ${procedencia}
   <footer>
     <code>${escapar(documento.tipo)}/${escapar(documento.slug)}</code>
     <div class="acoes">${acao}</div>
@@ -95,6 +116,7 @@ export function formularioDeCatalogo(tipo: string, singular: string): string {
         <label>título <input name="titulo" required autocomplete="off"></label>
         <label>categoria <input name="categoria" placeholder="Desenvolvimento, Qualidade…" autocomplete="off"></label>
       </div>
+      <label>área <select name="area">${AREAS.map((area) => `<option value="${area}">${area}</option>`).join("")}</select></label>
       <label>descrição <input name="descricao" placeholder="o que faz, em uma linha" autocomplete="off"></label>
       <div class="dois">
         <label>usar quando <input name="gatilhos" placeholder="revisar PR, escrever teste…" autocomplete="off"></label>
@@ -103,6 +125,28 @@ export function formularioDeCatalogo(tipo: string, singular: string): string {
       <label>conteúdo <textarea name="conteudo" rows="14" required
         placeholder="as instruções que o agente vai receber"></textarea></label>
       <div class="linha-acoes"><button type="submit">salvar</button></div>
+    </form>
+  </div>
+</details>`;
+}
+
+/**
+ * Importar um pacote.
+ *
+ * O zip é o formato em que as skills circulam, e o frontmatter dentro dele já
+ * descreve a skill — por isso aqui se pede quase nada: o arquivo e a área. O
+ * resto é lido de dentro.
+ */
+export function formularioDePacote(tipo: string): string {
+  return `<details class="dobra">
+  <summary>${MAIS_SVG} importar pacote (.zip)</summary>
+  <div class="corpo">
+    <form class="campos" data-pacote data-tipo="${escapar(tipo)}">
+      <label>arquivo <input type="file" name="zip" accept=".zip,application/zip" required></label>
+      <label>área <select name="area">${AREAS.map((area) => `<option value="${area}">${area}</option>`).join("")}</select></label>
+      <label>categoria <input name="categoria" placeholder="opcional; o pacote não declara" autocomplete="off"></label>
+      <p class="explicacao">Nome, descrição, quando usar e procedência saem do frontmatter do SKILL.md.</p>
+      <div class="linha-acoes"><button type="submit">importar</button></div>
     </form>
   </div>
 </details>`;
