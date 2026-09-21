@@ -2,3 +2,4 @@ node_modules/
 dist/
 *.db
 *.db-journal
+public/app.js

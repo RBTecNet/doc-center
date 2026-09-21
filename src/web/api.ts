@@ -134,6 +134,12 @@ export async function rotaApi(store: Store, req: IncomingMessage, res: ServerRes
         titulo: texto(dados.titulo),
         slug: texto(dados.slug),
         conteudo: texto(dados.conteudo),
+        // A vitrine vem junto: sem ela a skill nasce sem o que se lê para
+        // escolhê-la, e escolher é a única coisa que se faz com uma skill.
+        descricao: texto(dados.descricao),
+        categoria: texto(dados.categoria),
+        gatilhos: texto(dados.gatilhos),
+        restricoes: texto(dados.restricoes),
       });
       responderJson(res, 201, { documento });
       return;
@@ -155,6 +161,10 @@ export async function rotaApi(store: Store, req: IncomingMessage, res: ServerRes
           documento: store.atualizarDocumento(id, {
             ...(typeof dados.titulo === "string" ? { titulo: dados.titulo } : {}),
             ...(typeof dados.conteudo === "string" ? { conteudo: dados.conteudo } : {}),
+            ...(typeof dados.descricao === "string" ? { descricao: dados.descricao } : {}),
+            ...(typeof dados.categoria === "string" ? { categoria: dados.categoria } : {}),
+            ...(typeof dados.gatilhos === "string" ? { gatilhos: dados.gatilhos } : {}),
+            ...(typeof dados.restricoes === "string" ? { restricoes: dados.restricoes } : {}),
           }),
         });
         return;

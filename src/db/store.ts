@@ -10,7 +10,21 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
-import { SCHEMA, comoSlug, type Documento, type Projeto } from "./schema.js";
+import { COLUNAS_NOVAS, SCHEMA, SEM_CATEGORIA, comoSlug, type Documento, type Projeto } from "./schema.js";
+
+/**
+ * Erro de quem usou, não do servidor.
+ *
+ * "Já existe uma skill com esse nome" é uma resposta legítima a um pedido
+ * legítimo, e responder 500 a ela faz o operador procurar defeito no lugar
+ * errado — e um monitor futuro contar falha onde não houve.
+ */
+export class ErroDeUso extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ErroDeUso";
+  }
+}
 
 export interface StoreOptions {
   /** Caminho do arquivo, ou `:memory:` nos testes. */
@@ -35,6 +49,10 @@ interface LinhaDocumento {
   slug: string;
   titulo: string;
   conteudo: string;
+  descricao: string;
+  categoria: string;
+  gatilhos: string;
+  restricoes: string;
   criado_em: string;
   alterado_em: string;
 }
@@ -56,6 +74,10 @@ const comoDocumento = (linha: LinhaDocumento): Documento => ({
   slug: linha.slug,
   titulo: linha.titulo,
   conteudo: linha.conteudo,
+  descricao: linha.descricao ?? "",
+  categoria: linha.categoria ?? "",
+  gatilhos: linha.gatilhos ?? "",
+  restricoes: linha.restricoes ?? "",
   criadoEm: linha.criado_em,
   alteradoEm: linha.alterado_em,
 });
@@ -71,11 +93,21 @@ export class Store {
     // seleções órfãs apontando para nada.
     this.db.exec("PRAGMA foreign_keys = ON");
     this.db.exec(SCHEMA);
+    this.migrar();
     this.agora = options.now ?? (() => new Date().toISOString());
   }
 
   close(): void {
     this.db.close();
+  }
+
+  /** Acrescenta o que falta num banco que já existia. Idempotente por natureza. */
+  private migrar(): void {
+    for (const { tabela, coluna, definicao } of COLUNAS_NOVAS) {
+      const colunas = this.db.prepare(`PRAGMA table_info(${tabela})`).all() as unknown as { name: string }[];
+      if (colunas.some((existente) => existente.name === coluna)) continue;
+      this.db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${coluna} ${definicao}`);
+    }
   }
 
   // ---------------------------------------------------------------- projetos
@@ -92,8 +124,8 @@ export class Store {
 
   criarProjeto(entrada: { nome: string; slug?: string; descricao?: string; pedido?: string }): Projeto {
     const slug = comoSlug(entrada.slug || entrada.nome);
-    if (slug === "") throw new Error("o projeto precisa de um nome que vire slug");
-    if (this.projetoPorSlug(slug)) throw new Error(`já existe um projeto com o slug "${slug}"`);
+    if (slug === "") throw new ErroDeUso("o projeto precisa de um nome que vire slug");
+    if (this.projetoPorSlug(slug)) throw new ErroDeUso(`já existe um projeto com o slug "${slug}"`);
 
     const instante = this.agora();
     this.db
@@ -104,7 +136,7 @@ export class Store {
 
   atualizarProjeto(slug: string, campos: { nome?: string; descricao?: string; pedido?: string }): Projeto {
     const atual = this.projetoPorSlug(slug);
-    if (!atual) throw new Error(`projeto "${slug}" não existe`);
+    if (!atual) throw new ErroDeUso(`projeto "${slug}" não existe`);
 
     this.db
       .prepare("UPDATE projetos SET nome = ?, descricao = ?, pedido = ?, alterado_em = ? WHERE slug = ?")
@@ -172,32 +204,80 @@ export class Store {
     titulo: string;
     slug?: string;
     conteudo: string;
+    descricao?: string;
+    categoria?: string;
+    gatilhos?: string;
+    restricoes?: string;
   }): Documento {
     const slug = comoSlug(entrada.slug || entrada.titulo);
-    if (slug === "") throw new Error("o documento precisa de um título que vire slug");
+    if (slug === "") throw new ErroDeUso("o documento precisa de um título que vire slug");
 
     const projetoId = entrada.projetoId ?? null;
     if (this.documento(projetoId, entrada.tipo, slug)) {
-      throw new Error(`já existe um documento ${entrada.tipo}/${slug} ${projetoId === null ? "na área geral" : "neste projeto"}`);
+      throw new ErroDeUso(`já existe um documento ${entrada.tipo}/${slug} ${projetoId === null ? "na área geral" : "neste projeto"}`);
     }
 
     const instante = this.agora();
     this.db
       .prepare(
-        "INSERT INTO documentos (projeto_id, tipo, slug, titulo, conteudo, criado_em, alterado_em) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO documentos (projeto_id, tipo, slug, titulo, conteudo, descricao, categoria, gatilhos, restricoes, criado_em, alterado_em)" +
+          " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
-      .run(projetoId, entrada.tipo, slug, entrada.titulo, entrada.conteudo, instante, instante);
+      .run(
+        projetoId,
+        entrada.tipo,
+        slug,
+        entrada.titulo,
+        entrada.conteudo,
+        entrada.descricao ?? "",
+        entrada.categoria ?? "",
+        entrada.gatilhos ?? "",
+        entrada.restricoes ?? "",
+        instante,
+        instante,
+      );
     return this.documento(projetoId, entrada.tipo, slug)!;
   }
 
-  atualizarDocumento(id: number, campos: { titulo?: string; conteudo?: string }): Documento {
+  atualizarDocumento(
+    id: number,
+    campos: { titulo?: string; conteudo?: string; descricao?: string; categoria?: string; gatilhos?: string; restricoes?: string },
+  ): Documento {
     const atual = this.documentoPorId(id);
-    if (!atual) throw new Error(`documento ${id} não existe`);
+    if (!atual) throw new ErroDeUso(`documento ${id} não existe`);
 
     this.db
-      .prepare("UPDATE documentos SET titulo = ?, conteudo = ?, alterado_em = ? WHERE id = ?")
-      .run(campos.titulo ?? atual.titulo, campos.conteudo ?? atual.conteudo, this.agora(), id);
+      .prepare(
+        "UPDATE documentos SET titulo = ?, conteudo = ?, descricao = ?, categoria = ?, gatilhos = ?, restricoes = ?, alterado_em = ? WHERE id = ?",
+      )
+      .run(
+        campos.titulo ?? atual.titulo,
+        campos.conteudo ?? atual.conteudo,
+        campos.descricao ?? atual.descricao,
+        campos.categoria ?? atual.categoria,
+        campos.gatilhos ?? atual.gatilhos,
+        campos.restricoes ?? atual.restricoes,
+        this.agora(),
+        id,
+      );
     return this.documentoPorId(id)!;
+  }
+
+  /**
+   * As categorias de um tipo, com quantos há em cada — o filtro do catálogo.
+   *
+   * Sai do banco em vez de ser uma lista fixa: quem cadastra uma skill inventa a
+   * categoria que precisa, e uma lista fechada obrigaria a mexer no código para
+   * cada área nova que aparecer.
+   */
+  categorias(tipo: string): { categoria: string; quantos: number }[] {
+    const linhas = this.db
+      .prepare(
+        "SELECT CASE WHEN TRIM(categoria) = '' THEN ? ELSE categoria END AS categoria, COUNT(*) AS quantos" +
+          " FROM documentos WHERE projeto_id IS NULL AND tipo = ? GROUP BY 1 ORDER BY 1",
+      )
+      .all(SEM_CATEGORIA, tipo) as unknown as { categoria: string; quantos: number }[];
+    return linhas;
   }
 
   removerDocumento(id: number): void {
@@ -214,9 +294,9 @@ export class Store {
    */
   selecionar(projetoId: number, documentoId: number): void {
     const documento = this.documentoPorId(documentoId);
-    if (!documento) throw new Error(`documento ${documentoId} não existe`);
+    if (!documento) throw new ErroDeUso(`documento ${documentoId} não existe`);
     if (documento.projetoId !== null) {
-      throw new Error("só documentos da área geral são selecionados; os do próprio projeto já estão nele");
+      throw new ErroDeUso("só documentos da área geral são selecionados; os do próprio projeto já estão nele");
     }
     this.db
       .prepare("INSERT OR IGNORE INTO selecoes (projeto_id, documento_id, criado_em) VALUES (?, ?, ?)")

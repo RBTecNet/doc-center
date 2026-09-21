@@ -13,7 +13,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFile } from "node:fs/promises";
-import { Store } from "./db/store.js";
+import { ErroDeUso, Store } from "./db/store.js";
 import { handle, type RpcRequest } from "./mcp/server.js";
 import { rotaApi } from "./web/api.js";
 import { paginaDe } from "./web/paginas.js";
@@ -110,7 +110,9 @@ export function createApp(options: AppOptions): Server {
       } catch (erro) {
         // O erro vai para a resposta, não só para o log: quem está usando a
         // interface precisa saber o que aconteceu sem ir procurar no terminal.
-        responderJson(res, 500, { erro: erro instanceof Error ? erro.message : String(erro) });
+        // E erro de uso responde 400: 500 mandaria procurar defeito no servidor.
+        const status = erro instanceof ErroDeUso ? 400 : 500;
+        responderJson(res, status, { erro: erro instanceof Error ? erro.message : String(erro) });
       }
     })();
   });

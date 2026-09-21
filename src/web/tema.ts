@@ -114,15 +114,50 @@ body {
   font: 10px var(--mono); color: var(--apagado);
   text-transform: uppercase; letter-spacing: .09em; padding: 4px 8px 8px;
 }
-.arvore a {
-  display: flex; align-items: center; gap: 7px;
-  min-height: 28px; padding: 3px 8px; border-radius: 6px;
-  color: var(--texto-3); text-decoration: none; transition: background .12s;
+
+/* Uma linha da árvore: pasta que abre (summary) ou folha (a). A indentação vem
+   das guias verticais, como na referência — elas mostram a profundidade sem
+   depender de margem, que se perde quando a linha quebra. */
+.arvore summary, .arvore .folha {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 28px; padding: 2px 6px 2px 2px; border-radius: 6px;
+  color: var(--texto-3); text-decoration: none; font-size: 12.5px;
+  cursor: pointer; list-style: none; transition: background .12s;
 }
-.arvore a:hover { background: var(--hover); color: var(--texto); }
-.arvore a.ativo { background: var(--hover); color: var(--texto); }
-.arvore a .contador { margin-left: auto; font: 10px var(--mono); color: var(--apagado); }
-.arvore .vazio { color: var(--apagado); font-size: 12px; padding: 4px 8px; }
+.arvore summary::-webkit-details-marker { display: none; }
+.arvore summary:hover, .arvore .folha:hover { background: var(--hover); color: var(--texto); }
+.arvore .folha.vazia { color: var(--apagado); font-style: italic; cursor: default; }
+.arvore .folha.vazia:hover { background: transparent; }
+
+.guia { width: 13px; flex: none; align-self: stretch; border-left: 1px solid var(--borda-sutil); margin-left: 5px; }
+
+.rotulo-item { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.contador { margin-left: auto; font: 10px var(--mono); color: var(--apagado); flex: none; }
+
+.titulo-ramo { color: inherit; text-decoration: none; font-weight: 500; }
+.titulo-ramo.ativo { color: var(--verde-claro); }
+
+/* A seta gira e a pasta troca de rosto: o estado do ramo é visível de longe. */
+.seta { flex: none; color: var(--apagado); transition: transform .15s; }
+details[open] > summary .seta { transform: rotate(90deg); }
+.icone-pasta, .icone-pasta-aberta { display: flex; flex: none; }
+details[open] > summary .icone-pasta { display: none; }
+details:not([open]) > summary .icone-pasta-aberta { display: none; }
+
+.arvore .ramo { display: block; }
+
+/* A lixeira fica discreta e só acende no hover da linha: ela apaga o projeto
+   inteiro, e um botão vermelho permanente ao lado de cada nome convida ao
+   clique errado. O contador cede o lugar quando ela aparece. */
+.lixeira {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border-radius: 5px;
+  background: transparent; border: 1px solid transparent; color: var(--apagado);
+  opacity: 0; transition: opacity .12s, color .12s, border-color .12s;
+}
+.arvore summary:hover .lixeira { opacity: 1; }
+.lixeira:hover { color: var(--vermelho); border-color: #4a2529; background: transparent; }
+.lixeira:focus-visible { opacity: 1; outline: none; border-color: var(--vermelho); }
 
 /* ──────────────────────────────────────────────────────── painel central */
 
@@ -179,6 +214,57 @@ body {
   white-space: nowrap;
 }
 .etiqueta.geral { background: transparent; color: var(--ambar); border-color: #3a2f20; }
+
+/* ──────────────────────────────────────────────────────────────── catálogo */
+
+.filtros { display: flex; flex-direction: column; gap: 10px; }
+.busca { width: 100%; }
+.categorias { display: flex; flex-wrap: wrap; gap: 6px; }
+.filtro {
+  font: 500 11px var(--sans); padding: 5px 10px; border-radius: 999px;
+  background: transparent; color: var(--fraco); border: 1px solid var(--borda-forte);
+}
+.filtro:hover { background: var(--hover); color: var(--texto); }
+.filtro.ativo { background: var(--verde-fundo); color: var(--verde-claro); border-color: var(--verde-borda); }
+.filtro .contagem { margin-left: 4px; font: 10px var(--mono); opacity: .7; }
+
+.vitrines { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+
+/* O cartão do catálogo responde "isto serve para o meu caso?" — por isso mostra
+   o que faz, quando usar e quando NÃO usar, e não só o título. */
+.vitrine {
+  display: flex; flex-direction: column; gap: 9px;
+  border: 1px solid var(--borda-sutil); background: var(--elevado);
+  border-radius: 9px; padding: 13px 14px;
+}
+.vitrine.adotado { border-color: var(--verde-borda); }
+.vitrine > header { display: flex; align-items: flex-start; gap: 8px; }
+.vitrine h3 { font-size: 13px; font-weight: 600; }
+.categoria {
+  margin-left: auto; flex: none;
+  font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ambar); border: 1px solid #3a2f20; border-radius: 999px; padding: 2px 8px;
+}
+.vitrine .descricao { font-size: 12.5px; color: var(--texto-3); }
+.vitrine .sem-descricao { font-size: 12px; color: var(--apagado); font-style: italic; }
+
+.faixa { display: flex; gap: 7px; font-size: 11.5px; color: var(--fraco); }
+.faixa-rotulo {
+  flex: none; font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .05em;
+  padding-top: 1px;
+}
+.faixa.usar .faixa-rotulo { color: var(--verde); }
+.faixa.evitar .faixa-rotulo { color: var(--vermelho); }
+
+.vitrine > footer {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 2px; padding-top: 10px; border-top: 1px solid var(--borda-sutil);
+}
+.vitrine > footer code { font: 10px var(--mono); color: var(--apagado); }
+.vitrine > footer .acoes { margin-left: auto; display: flex; gap: 6px; }
+
+.dois { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 700px) { .dois { grid-template-columns: 1fr; } }
 
 /* ───────────────────────────────────────────────────────────────── seleção */
 
@@ -272,3 +358,20 @@ export const ARQUIVO_SVG =
 export const MAIS_SVG =
   '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
   'stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>';
+
+export const PASTA_ABERTA_SVG =
+  '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#e0a458" stroke-width="1.7" ' +
+  'stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a2 2 0 0 1 2-2h3.6a2 2 0 0 1 1.4.6L11.4 8H19a2 2 0 0 1 2 2v.5H6.2a2 2 0 0 0-1.9 1.4L3 17.5V8z"></path><path d="M3 17.6 4.4 12a2 2 0 0 1 1.9-1.4H21l-1.6 6a2 2 0 0 1-1.9 1.4H5a2 2 0 0 1-2-1.4z"></path></svg>';
+
+export const TEXTO_SVG =
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#7f8b98" stroke-width="1.7" ' +
+  'stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"></path></svg>';
+
+export const SETA_SVG =
+  '<svg class="seta" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+  'stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"></path></svg>';
+
+export const LIXEIRA_SVG =
+  '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" ' +
+  'stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"></path>' +
+  '<path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6"></path></svg>';
