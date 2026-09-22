@@ -23,6 +23,7 @@
 
 import type { Store } from "../db/store.js";
 import type { Documento } from "../db/schema.js";
+import { comoSlug } from "../db/schema.js";
 
 export const PROTOCOL_VERSION = "2025-06-18";
 export const SERVER_INFO = { name: "doc-center", version: "0.1.0" } as const;
@@ -249,6 +250,25 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
             },
           },
           {
+            name: "registrar_levantamento",
+            description:
+              "Grava o levantamento de uma aplicação existente como projeto desta base. " +
+              "Cria o projeto quando ele ainda não existe, guarda o documento e semeia o pedido " +
+              "com um rascunho de reescrita para o desenvolvedor editar. Rodar de novo atualiza o " +
+              "documento e nunca sobrescreve um pedido que já foi escrito.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                projeto: { type: "string", description: "o slug do projeto a criar ou atualizar" },
+                nome: { type: "string", description: "o nome da aplicação levantada" },
+                titulo: { type: "string", description: "o título do documento; o padrão é Levantamento" },
+                conteudo: { type: "string", description: "o levantamento em markdown" },
+                procedencia: { type: "string", description: "o run que o produziu" },
+              },
+              required: ["projeto", "conteudo"],
+            },
+          },
+          {
             name: "listar_material",
             description:
               "O material de um projeto: o pedido e os documentos que ele usa. " +
@@ -265,6 +285,65 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
     case "tools/call": {
       const nome = String(request.params?.name ?? "");
       const argumentos = (request.params?.arguments ?? {}) as Record<string, string>;
+
+      if (nome === "registrar_levantamento") {
+        const slug = String(argumentos.projeto ?? "").trim();
+        const conteudo = String(argumentos.conteudo ?? "").trim();
+        if (slug === "" || conteudo === "") {
+          return responder({ isError: true, content: [{ type: "text", text: "o levantamento precisa do slug do projeto e do conteúdo" }] });
+        }
+
+        const aplicacao = String(argumentos.nome ?? "").trim() || slug;
+        /*
+         * O pedido nasce como rascunho de reescrita, e não vazio.
+         *
+         * Quem acabou de levantar uma aplicação quer reescrevê-la; a página do
+         * projeto abrindo com um campo em branco faz cada um inventar a própria
+         * forma de dizer isso. O texto é editável e some no primeiro salvamento
+         * de quem souber melhor — e por isso ele NUNCA sobrescreve um pedido
+         * que já existe.
+         */
+        const semente = [
+          `Reescrever a aplicação ${aplicacao}, a partir do levantamento deste projeto.`,
+          "",
+          "O levantamento descreve o que a aplicação faz hoje, com a evidência de onde cada",
+          "regra foi lida. Ele é a autoridade sobre o COMPORTAMENTO; a stack de origem é",
+          "informação, não obrigação.",
+          "",
+          "Edite as duas linhas abaixo antes de rodar o init:",
+          "",
+          "- Stack de destino: (a mesma de hoje | outra — diga qual)",
+          "- Fica de fora: (nada | os domínios ou funcionalidades que não serão reescritos)",
+        ].join("\n");
+
+        const projeto =
+          store.projetoPorSlug(slug) ??
+          store.criarProjeto({ nome: aplicacao, slug, descricao: `Levantamento de ${aplicacao}`, pedido: semente });
+
+        const titulo = String(argumentos.titulo ?? "").trim() || "Levantamento";
+        const existente = store.documento(projeto.id, "documentacao", comoSlug(titulo));
+
+        const documento = existente
+          ? store.atualizarDocumento(existente.id, { conteudo })
+          : store.criarDocumento({
+              projetoId: projeto.id,
+              tipo: "documentacao",
+              titulo,
+              conteudo,
+              procedencia: String(argumentos.procedencia ?? ""),
+            });
+
+        return responder({
+          content: [
+            {
+              type: "text",
+              text:
+                `${existente ? "levantamento atualizado" : "levantamento gravado"} em ${projeto.slug}: ` +
+                `${uriDoDocumento(projeto.slug, documento)}`,
+            },
+          ],
+        });
+      }
 
       if (nome === "registrar_memoria") {
         const projeto = store.projetoPorSlug(String(argumentos.projeto ?? ""));
