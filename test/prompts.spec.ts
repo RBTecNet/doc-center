@@ -55,7 +55,7 @@ afterEach(async () => {
 describe("prompts/list", () => {
   it("traz o pedido do projeto e os prompts guardados, cada um com seu nome", async () => {
     const { result } = await rpc("prompts/list");
-    const porNome = new Map(result.prompts.map((prompt: any) => [prompt.name, prompt]));
+    const porNome = new Map<string, any>(result.prompts.map((prompt: any) => [prompt.name, prompt]));
 
     expect([...porNome.keys()].sort()).toEqual(["geral/crud-completo", "mcp-teste", "mcp-teste/editar-cliente"]);
     expect(porNome.get("mcp-teste")?.title).toBe("pedido — MCP Teste");

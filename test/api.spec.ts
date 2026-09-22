@@ -127,3 +127,41 @@ describe("adotar do catálogo", () => {
     expect(aindaExiste.status).toBe(200);
   });
 });
+
+/**
+ * A tela dos artefatos que o harness grava.
+ *
+ * Um levantamento tem dezenas de milhares de caracteres, e a prévia nasceu com
+ * corte em 600 e `overflow: hidden`: servia para uma memória de três linhas e
+ * escondia 90% do que o harness escreveu. Quem precisa conferir um documento
+ * gerado só tem um jeito — lendo.
+ */
+describe("ler um artefato inteiro na tela", () => {
+  it("a prévia leva o documento todo, não os primeiros 600 caracteres", async () => {
+    const projeto = store.criarProjeto({ nome: "P", slug: "p", pedido: "x" });
+    const longo = Array.from({ length: 200 }, (_, indice) => `linha ${indice} do levantamento`).join("\n");
+    store.criarDocumento({ projetoId: projeto.id, tipo: "documentacao", titulo: "Levantamento", conteudo: longo });
+
+    const html = await (await fetch(`${base}/projetos/p`)).text();
+    expect(html).toContain("linha 0 do levantamento");
+    expect(html).toContain("linha 199 do levantamento");
+  });
+
+  it("acima do teto, diz quanto ficou de fora em vez de terminar no meio", async () => {
+    const projeto = store.criarProjeto({ nome: "Q", slug: "q", pedido: "x" });
+    store.criarDocumento({ projetoId: projeto.id, tipo: "documentacao", titulo: "Enorme", conteudo: "a".repeat(30_000) });
+
+    const html = await (await fetch(`${base}/projetos/q`)).text();
+    expect(html).toContain("mostrando os primeiros");
+    expect(html).toContain("abra em editar para ver tudo");
+  });
+
+  it("prompts têm seu próprio botão de criar, com campo de descrição", async () => {
+    store.criarProjeto({ nome: "R", slug: "r", pedido: "x" });
+    const html = await (await fetch(`${base}/projetos/r`)).text();
+
+    expect(html).toContain("novo prompt");
+    // A descrição é o que distingue dois prompts na hora de escolher, no wizard.
+    expect(html).toContain("quando usar este prompt");
+  });
+});

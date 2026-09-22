@@ -83,6 +83,25 @@ function moldura(store: Store, pagina: Moldura): string {
 </html>`;
 }
 
+/**
+ * Quanto de um documento vai para a tela.
+ *
+ * O teto existe para a página de um projeto com dez levantamentos não virar
+ * megabytes de HTML. Quem precisa do resto abre o editor, que traz tudo — e o
+ * rodapé diz que existe resto, em vez de terminar no meio sem avisar.
+ */
+const MAX_PREVIA = 20_000;
+
+function previa(conteudo: string): string {
+  const cortado = conteudo.length > MAX_PREVIA;
+  return [
+    `<pre class="previa">${escapar(cortado ? conteudo.slice(0, MAX_PREVIA) : conteudo)}</pre>`,
+    cortado
+      ? `<p class="cortado">mostrando os primeiros ${MAX_PREVIA.toLocaleString("pt-BR")} de ${conteudo.length.toLocaleString("pt-BR")} caracteres — abra em editar para ver tudo</p>`
+      : "",
+  ].join("");
+}
+
 function cartao(documento: Documento, uri: string, daGeral = false): string {
   return `<article class="cartao" data-id="${documento.id}">
   <header>
@@ -90,7 +109,7 @@ function cartao(documento: Documento, uri: string, daGeral = false): string {
     <h3>${escapar(documento.titulo)}</h3>
     <span class="uri">${escapar(uri)}</span>
   </header>
-  <pre class="previa">${escapar(documento.conteudo.slice(0, 600))}</pre>
+  ${previa(documento.conteudo)}
   <div class="acoes">
     <button class="discreto" data-editar="${documento.id}">editar</button>
     <button class="discreto perigo" data-remover="${documento.id}">remover</button>
@@ -113,6 +132,11 @@ function formulario(projetoSlug: string | null, tipo: string, singular: string):
       ${projetoSlug ? `<input type="hidden" name="projeto" value="${escapar(projetoSlug)}">` : ""}
       <input type="hidden" name="tipo" value="${escapar(tipo)}">
       <label>título <input name="titulo" required autocomplete="off"></label>
+      ${
+        tipo === "prompt"
+          ? `<label>descrição <input name="descricao" autocomplete="off" placeholder="quando usar este prompt"></label>`
+          : ""
+      }
       <label>conteúdo <textarea name="conteudo" rows="12" required></textarea></label>
       <div class="linha-acoes"><button type="submit">salvar</button></div>
     </form>
@@ -126,6 +150,7 @@ function singularDe(tipo: string): string {
     skill: "nova skill",
     memoria: "nova memória",
     hook: "novo hook",
+    prompt: "novo prompt",
     documentacao: "novo documento",
   };
   return conhecido[tipo] ?? `novo ${tipo}`;
@@ -330,7 +355,7 @@ function secaoMemorias(store: Store, projeto: Projeto): string {
       <h3>${escapar(memoria.titulo)}</h3>
       ${memoria.status === "rascunho" ? '<span class="pendente">rascunho</span>' : ""}
     </header>
-    <pre class="previa">${escapar(memoria.conteudo.slice(0, 600))}</pre>
+    ${previa(memoria.conteudo)}
     <div class="acoes">
       ${memoria.status === "rascunho" ? `<button data-aprovar="${memoria.id}">aprovar</button>` : ""}
       <span class="procedencia">${escapar(memoria.procedencia)}</span>

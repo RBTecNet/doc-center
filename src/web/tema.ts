@@ -201,11 +201,21 @@ details:not([open]) > summary .icone-pasta-aberta { display: none; }
 }
 .cartao h3 { font-size: 12.5px; font-weight: 600; }
 .cartao .uri { margin-left: auto; font: 10px var(--mono); color: var(--apagado); }
+/*
+ * A prévia ROLA.
+ *
+ * Ela nasceu com overflow hidden e um corte em 600 caracteres, o que servia
+ * para uma memória de três linhas e escondia 90% de um levantamento. O documento
+ * que o harness grava é o caso que importa aqui — ninguém o escreveu à mão, e a
+ * única forma de conferi-lo é lendo.
+ */
 .cartao .previa {
   padding: 11px 13px; font: 11.5px/1.6 var(--mono); color: var(--texto-3);
-  white-space: pre-wrap; max-height: 150px; overflow: hidden; background: var(--codigo);
+  white-space: pre-wrap; max-height: 300px; overflow: auto; background: var(--codigo);
 }
 .cartao .acoes { display: flex; gap: 6px; padding: 8px 12px; border-top: 1px solid var(--borda-sutil); }
+/* O aviso de corte: só aparece quando houve corte, e diz quanto ficou de fora. */
+.cartao .cortado { padding: 6px 12px; font: 10px var(--mono); color: var(--apagado); border-top: 1px solid var(--borda-sutil); }
 
 .etiqueta {
   font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: .06em;
