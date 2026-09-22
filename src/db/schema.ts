@@ -192,6 +192,16 @@ export const CONTEINERES = [
   { tipo: "skill", titulo: "Skills", singular: "skill" },
   { tipo: "memoria", titulo: "Memórias", singular: "memória" },
   { tipo: "hook", titulo: "Hooks", singular: "hook" },
+  /*
+   * Prompts guardados.
+   *
+   * O `pedido` do projeto continua sendo o principal e único dele. Estes são os
+   * outros: o pedido de mudança que você vai repetir em três projetos, o texto
+   * que descreve uma funcionalidade que sempre volta, o levantamento que virou
+   * pedido de reescrita. Guardados no projeto quando são dele, na área geral
+   * quando servem a qualquer um.
+   */
+  { tipo: "prompt", titulo: "Prompts", singular: "prompt" },
   { tipo: "documentacao", titulo: "Documentação", singular: "documento" },
 ] as const;
 

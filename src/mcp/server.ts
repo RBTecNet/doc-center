@@ -206,25 +206,76 @@ export function handle(store: Store, request: RpcRequest): RpcResponse | null {
       );
     }
 
-    case "prompts/list":
-      return responder({
-        prompts: store
-          .listarProjetos()
-          .filter((projeto) => projeto.pedido.trim() !== "")
-          .map((projeto) => ({
+    /*
+     * Os prompts servidos são de duas origens.
+     *
+     * O `pedido` de cada projeto — que é único, é dele, e é o que o `init` lê —
+     * e os documentos do tipo `prompt`, que são os guardados: o pedido de
+     * mudança que se repete em três projetos, o texto de uma funcionalidade que
+     * sempre volta. Os do projeto aparecem com o projeto na frente; os da área
+     * geral, com `geral`.
+     *
+     * O nome é o endereço: `mcp-teste` é o pedido daquele projeto,
+     * `mcp-teste/editar-cliente` é um prompt dele, `geral/crud-completo` é um
+     * prompt que serve a qualquer projeto.
+     */
+    case "prompts/list": {
+      const prompts: { name: string; title: string; description: string }[] = [];
+
+      for (const projeto of store.listarProjetos()) {
+        if (projeto.pedido.trim() !== "") {
+          prompts.push({
             name: projeto.slug,
             title: `pedido — ${projeto.nome}`,
             description: projeto.descricao || `o que construir no projeto ${projeto.nome}`,
-          })),
-      });
+          });
+        }
+        for (const documento of store.listarDoProjeto(projeto.id)) {
+          if (documento.tipo !== "prompt") continue;
+          prompts.push({
+            name: `${projeto.slug}/${documento.slug}`,
+            title: `${documento.titulo} — ${projeto.nome}`,
+            description: documento.descricao || `prompt do projeto ${projeto.nome}`,
+          });
+        }
+      }
+
+      for (const documento of store.listarGerais()) {
+        if (documento.tipo !== "prompt") continue;
+        prompts.push({
+          name: `geral/${documento.slug}`,
+          title: documento.titulo,
+          description: documento.descricao || "prompt da área geral",
+        });
+      }
+
+      return responder({ prompts });
+    }
 
     case "prompts/get": {
       const nome = String(request.params?.name ?? "");
-      const projeto = store.projetoPorSlug(nome);
-      if (!projeto) return recusar(PARAMETRO_INVALIDO, `não há pedido para o projeto "${nome}"`);
+      const barra = nome.indexOf("/");
+
+      if (barra < 0) {
+        const projeto = store.projetoPorSlug(nome);
+        if (!projeto) return recusar(PARAMETRO_INVALIDO, `não há pedido para o projeto "${nome}"`);
+        return responder({
+          description: projeto.descricao,
+          messages: [{ role: "user", content: { type: "text", text: projeto.pedido } }],
+        });
+      }
+
+      const escopo = nome.slice(0, barra);
+      const slug = nome.slice(barra + 1);
+      const projetoId = escopo === "geral" ? null : (store.projetoPorSlug(escopo)?.id ?? undefined);
+      if (projetoId === undefined) return recusar(PARAMETRO_INVALIDO, `não conheço o projeto "${escopo}"`);
+
+      const documento = store.documento(projetoId, "prompt", slug);
+      if (!documento) return recusar(PARAMETRO_INVALIDO, `não há prompt "${nome}"`);
+
       return responder({
-        description: projeto.descricao,
-        messages: [{ role: "user", content: { type: "text", text: projeto.pedido } }],
+        description: documento.descricao,
+        messages: [{ role: "user", content: { type: "text", text: documento.conteudo } }],
       });
     }
 
