@@ -17,12 +17,20 @@ import { ErroDeUso, Store } from "./db/store.js";
 import { handle, type RpcRequest } from "./mcp/server.js";
 import { rotaApi } from "./web/api.js";
 import { paginaDe } from "./web/paginas.js";
+import { paginaDeRuns } from "./web/runs.js";
 
 export interface AppOptions {
   store: Store;
   /** Porta 0 pede uma livre ao sistema — é o que os testes usam. */
   port?: number;
   host?: string;
+  /**
+   * A pasta onde moram os projetos do capivara, para o visor de runs.
+   *
+   * Ausente desliga o visor, e é o padrão: ele é uma comodidade sobre arquivos
+   * que já existem, nunca um requisito de nada.
+   */
+  runsRoot?: string;
 }
 
 async function corpo(req: IncomingMessage): Promise<string> {
@@ -98,6 +106,12 @@ export function createApp(options: AppOptions): Server {
 
         if (caminho.startsWith("/api/")) {
           await rotaApi(store, req, res, url);
+          return;
+        }
+
+        const visor = await paginaDeRuns(store, url, options.runsRoot ?? null);
+        if (visor !== null) {
+          responderHtml(res, 200, visor);
           return;
         }
 

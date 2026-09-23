@@ -22,7 +22,7 @@ import { CSS, FONTES, MAIS_SVG, PASTA_SVG, RAIO_SVG } from "./tema.js";
 
 export { escapar };
 
-interface Moldura {
+export interface Moldura {
   titulo: string;
   caminho: string;
   pilula?: string;
@@ -31,7 +31,7 @@ interface Moldura {
   atual: string;
 }
 
-function moldura(store: Store, pagina: Moldura): string {
+export function moldura(store: Store, pagina: Moldura): string {
   const arvore = renderArvore(
     store.listarGerais(),
     store.listarProjetos().map((projeto) => ({ projeto, documentos: store.listarDoProjeto(projeto.id) })),
@@ -61,6 +61,9 @@ function moldura(store: Store, pagina: Moldura): string {
       <button class="acao-principal" data-novo-projeto>${MAIS_SVG} Novo projeto</button>
     </div>
     <nav class="arvore">${arvore}</nav>
+    <!-- O visor de runs é do capivara e é opcional: desligado, a página explica
+         como ligá-lo. Ele lê o disco e não fala com o harness. -->
+    <a class="rodape-lateral" href="/runs">runs do capivara</a>
   </aside>
 
   <main class="central">

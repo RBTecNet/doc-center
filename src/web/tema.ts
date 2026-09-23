@@ -223,6 +223,34 @@ details:not([open]) > summary .icone-pasta-aberta { display: none; }
   background: var(--verde-fundo); color: var(--verde-claro); border: 1px solid var(--verde-borda);
   white-space: nowrap;
 }
+/* ─────────────────────────────────────────────────────────── visor de runs */
+
+.rodape-lateral {
+  padding: 9px 14px; border-top: 1px solid var(--borda-sutil);
+  font: 11px var(--mono); color: var(--apagado); text-decoration: none;
+}
+.rodape-lateral:hover { color: var(--verde-claro); }
+
+
+/* Tabelas do visor: linhas densas, monoespaçado, sem enfeite. O que se lê aqui
+   são horários, ids de fase e nomes de arquivo — colunas que alinham valem mais
+   que qualquer moldura. */
+.runs { width: 100%; border-collapse: collapse; font: 11.5px var(--mono); }
+.runs th {
+  text-align: left; padding: 6px 10px; color: var(--apagado); font-weight: 500;
+  border-bottom: 1px solid var(--borda-sutil); white-space: nowrap;
+}
+/* A primeira coluna é sempre um horário ou um nome de arquivo: quebrar ali
+   não ganha espaço e custa uma linha por evento. */
+.runs td:first-child { white-space: nowrap; }
+.runs td { padding: 5px 10px; border-bottom: 1px solid var(--borda-sutil); color: var(--texto-3); vertical-align: top; }
+.runs tr:last-child td { border-bottom: none; }
+.runs a { color: var(--verde-claro); text-decoration: none; }
+.runs a:hover { text-decoration: underline; }
+
+/* O log ocupa a tela: é para ele que se abriu a página. */
+.cartao .previa.alto { max-height: none; }
+
 .etiqueta.geral { background: transparent; color: var(--ambar); border-color: #3a2f20; }
 
 /* ──────────────────────────────────────────────────────────────── catálogo */
