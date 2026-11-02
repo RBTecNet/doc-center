@@ -6,16 +6,16 @@ cookie; esse cookie não autentica o harness.
 
 ## MCP HTTP na porta 7777
 
-No configurador do Capivara, use `http://doc-center.rbtecnologia.net.br/mcp`
+No configurador do Capivara, use `http://doc-center.example.com/mcp`
 e porta `7777`. O endpoint final será
-`http://doc-center.rbtecnologia.net.br:7777/mcp`.
+`http://doc-center.example.com:7777/mcp`.
 Inclua `http://` no endereço para escolher o protocolo sem TLS.
 
 O serviço do doc-center precisa anunciar o mesmo endpoint:
 
 ```ini
 [Service]
-Environment="DOC_CENTER_MCP_PUBLIC_URL=http://doc-center.rbtecnologia.net.br:7777/mcp"
+Environment="DOC_CENTER_MCP_PUBLIC_URL=http://doc-center.example.com:7777/mcp"
 ```
 
 A porta deve estar publicada e acessível a partir da máquina que roda o
@@ -48,13 +48,13 @@ No serviço da aplicação, configure:
 
 ```ini
 [Service]
-Environment="DOC_CENTER_PUBLIC_URL=https://doc-center.rbtecnologia.net.br"
-Environment="DOC_CENTER_MCP_PUBLIC_URL=https://doc-center.rbtecnologia.net.br/mcp"
+Environment="DOC_CENTER_PUBLIC_URL=https://doc-center.example.com"
+Environment="DOC_CENTER_MCP_PUBLIC_URL=https://doc-center.example.com/mcp"
 Environment="DOC_CENTER_TRUST_PROXY=loopback"
 ```
 
 Após carregar a configuração do proxy e reiniciar o serviço, um pedido sem
-token a `https://doc-center.rbtecnologia.net.br/mcp` deve retornar **401**.
+token a `https://doc-center.example.com/mcp` deve retornar **401**.
 Uma resposta **404** indica que a requisição ainda está indo para a interface;
 **403** com erro de Host/Origin indica que a URL pública do MCP não coincide
 com o endereço publicado.
@@ -76,7 +76,7 @@ capivara config add mcp
 
 Preencha os três campos:
 
-- endereço: `http://doc-center.rbtecnologia.net.br/mcp`;
+- endereço: `http://doc-center.example.com/mcp`;
 - porta: `7777`;
 - token: a credencial criada em **Minha conta**. A digitação fica oculta no terminal.
 
@@ -87,7 +87,7 @@ Ela estará disponível para todos os projetos nas próximas execuções,
 inclusive após reiniciar o computador.
 
 Se usar a rota HTTPS do proxy descrita acima, informe
-`https://doc-center.rbtecnologia.net.br/mcp`, porta `443`, no configurador.
+`https://doc-center.example.com/mcp`, porta `443`, no configurador.
 Quando o harness roda no próprio servidor, pode configurar
 `http://127.0.0.1/mcp`, porta `7777`, em vez do domínio público.
 
