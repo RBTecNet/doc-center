@@ -33,12 +33,6 @@ referência principal do projeto disponível aos clientes MCP.
 
 ## Recursos MCP por projeto
 
-```
-capivara://<projeto>/pedido
-capivara://<projeto>/docs/<tipo>/<slug>
-capivara://geral/docs/<tipo>/<slug>
-```
-
 Sob um projeto aparece **o que ele usa** — o que é dele mais o que selecionou.
 Pedir um documento da área geral que o projeto não selecionou é recusado: se
 bastasse o par tipo/slug, a seleção não significaria nada.
