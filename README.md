@@ -162,7 +162,7 @@ O script `start.sh` inicia a aplicação em primeiro plano, usando o banco
 `doc-center.db` da própria pasta mesmo quando chamado de outro diretório:
 
 ```bash
-cd ~/webserver/doc-center.rbtecnologia.net.br
+cd ~/webserver/doc-center.example.com
 ./start.sh
 ```
 
@@ -177,8 +177,8 @@ mostrar o endereço correto do MCP na conta. Exemplo quando o proxy publica
 HTTPS no site e na porta 7777 do MCP:
 
 ```bash
-DOC_CENTER_PUBLIC_URL=https://doc-center.rbtecnologia.net.br \
-DOC_CENTER_MCP_PUBLIC_URL=https://doc-center.rbtecnologia.net.br:7777/mcp \
+DOC_CENTER_PUBLIC_URL=https://doc-center.example.com \
+DOC_CENTER_MCP_PUBLIC_URL=https://doc-center.example.com:7777/mcp \
 DOC_CENTER_TRUST_PROXY=loopback \
 ./start.sh
 ```
