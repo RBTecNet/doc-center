@@ -10,8 +10,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Server } from "node:http";
 import { Store } from "../src/db/store.js";
 import { createApp, listen } from "../src/http.js";
+import { autenticarTeste } from "./auth-fixture.js";
 
 let store: Store;
+let rootStore: Store;
+let headers: Record<string, string> = {};
+let mcpHeaders: Record<string, string> = {};
 let server: Server;
 let base = "";
 let projetoId = 0;
@@ -19,7 +23,7 @@ let projetoId = 0;
 const rpc = async (method: string, params?: Record<string, unknown>) => {
   const resposta = await fetch(`${base}/mcp`, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { ...mcpHeaders, "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, ...(params ? { params } : {}) }),
   });
   return (await resposta.json()) as any;
@@ -32,15 +36,16 @@ const registrar = (natureza: string, titulo: string, conteudo: string) =>
   });
 
 beforeEach(async () => {
-  store = new Store({ file: ":memory:" });
+  store = rootStore = new Store({ file: ":memory:" });
   projetoId = store.criarProjeto({ nome: "P", pedido: "algo" }).id;
   server = createApp({ store });
   base = `http://127.0.0.1:${await listen(server, 0)}`;
+  ({ store, headers, mcpHeaders } = await autenticarTeste(rootStore, base));
 });
 
 afterEach(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  store.close();
+  rootStore.close();
 });
 
 describe("registrar memória pelo protocolo", () => {
@@ -110,7 +115,7 @@ describe("rascunho não chega a um run", () => {
     expect(antes.some((recurso) => recurso.uri.includes("ainda-nao-revisada"))).toBe(false);
 
     const pendente = store.rascunhos(projetoId)[0]!;
-    await fetch(`${base}/api/documentos/${pendente.id}/aprovar`, { method: "POST" });
+    await fetch(`${base}/api/documentos/${pendente.id}/aprovar`, { method: "POST", headers });
 
     const depois = (await rpc("resources/list")).result.resources as { uri: string }[];
     expect(depois.some((recurso) => recurso.uri.includes("ainda-nao-revisada"))).toBe(true);

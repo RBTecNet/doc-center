@@ -22,17 +22,23 @@
 export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS projetos (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  slug        TEXT NOT NULL UNIQUE,
+  -- Zero identifica dados locais anteriores à criação da primeira conta.
+  usuario_id  INTEGER NOT NULL DEFAULT 0,
+  slug        TEXT NOT NULL,
   nome        TEXT NOT NULL,
   descricao   TEXT NOT NULL DEFAULT '',
+  -- Identidade portátil do Git remoto, sem credenciais nem caminhos locais.
+  repositorio TEXT NOT NULL DEFAULT '',
   -- O que construir. Vazio significa projeto cadastrado e ainda sem pedido.
   pedido      TEXT NOT NULL DEFAULT '',
   criado_em   TEXT NOT NULL,
-  alterado_em TEXT NOT NULL
+  alterado_em TEXT NOT NULL,
+  UNIQUE (usuario_id, slug)
 );
 
 CREATE TABLE IF NOT EXISTS documentos (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  usuario_id  INTEGER NOT NULL DEFAULT 0,
   -- Nulo significa área geral: o documento existe para ser reusado por projetos.
   projeto_id  INTEGER REFERENCES projetos(id) ON DELETE CASCADE,
   tipo        TEXT NOT NULL,
@@ -52,8 +58,8 @@ CREATE TABLE IF NOT EXISTS documentos (
 -- Dois documentos com o mesmo tipo e slug no mesmo lugar seriam duas URIs
 -- iguais apontando para conteúdos diferentes, e o harness leria um dos dois sem
 -- saber que havia outro. O índice trata a área geral como um "lugar" próprio.
-CREATE UNIQUE INDEX IF NOT EXISTS documentos_unicos
-  ON documentos (IFNULL(projeto_id, 0), tipo, slug);
+-- O índice inclui o usuário e é instalado por Store.migrar(), depois de
+-- acrescentar usuario_id a bancos existentes.
 
 -- Quais documentos da área geral cada projeto usa. O projeto não copia o
 -- documento: aponta para ele, e uma correção na área geral chega a todos os
@@ -85,6 +91,37 @@ CREATE TABLE IF NOT EXISTS arquivos (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS arquivos_unicos ON arquivos (documento_id, caminho);
+
+-- Marca a adoção única dos dados locais pela primeira conta, inclusive quando
+-- o banco começa vazio. Arquivos e seleções conservam seus IDs e proprietários
+-- por meio dos documentos e projetos aos quais pertencem.
+CREATE TABLE IF NOT EXISTS doc_center_metadados (
+  chave TEXT PRIMARY KEY,
+  valor TEXT NOT NULL
+);
+
+-- Conversas são eventos, não documentos editáveis. A chave vem da CLI e
+-- permite retomar uma sincronização sem duplicar mensagens já recebidas.
+CREATE TABLE IF NOT EXISTS historico (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  projeto_id INTEGER NOT NULL REFERENCES projetos(id) ON DELETE CASCADE,
+  evento_id TEXT NOT NULL,
+  origem TEXT NOT NULL,
+  sessao TEXT NOT NULL,
+  papel TEXT NOT NULL CHECK (papel IN ('user', 'assistant', 'tool', 'system')),
+  conteudo TEXT NOT NULL,
+  modelo TEXT NOT NULL DEFAULT '',
+  maquina TEXT NOT NULL DEFAULT '',
+  criado_em TEXT NOT NULL,
+  registrado_em TEXT NOT NULL,
+  metadados TEXT NOT NULL DEFAULT '',
+  UNIQUE (projeto_id, origem, sessao, evento_id)
+);
+CREATE INDEX IF NOT EXISTS historico_por_projeto ON historico (projeto_id, id);
+CREATE TRIGGER IF NOT EXISTS historico_imutavel
+  BEFORE UPDATE ON historico BEGIN
+    SELECT RAISE(ABORT, 'o histórico é imutável');
+  END;
 `;
 
 /**
@@ -95,6 +132,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS arquivos_unicos ON arquivos (documento_id, cam
  * pergunta o que existe e acrescenta o que falta.
  */
 export const COLUNAS_NOVAS: { tabela: string; coluna: string; definicao: string }[] = [
+  { tabela: "projetos", coluna: "usuario_id", definicao: "INTEGER NOT NULL DEFAULT 0" },
+  { tabela: "projetos", coluna: "repositorio", definicao: "TEXT NOT NULL DEFAULT ''" },
+  { tabela: "documentos", coluna: "usuario_id", definicao: "INTEGER NOT NULL DEFAULT 0" },
   { tabela: "documentos", coluna: "descricao", definicao: "TEXT NOT NULL DEFAULT ''" },
   { tabela: "documentos", coluna: "categoria", definicao: "TEXT NOT NULL DEFAULT ''" },
   { tabela: "documentos", coluna: "gatilhos", definicao: "TEXT NOT NULL DEFAULT ''" },
@@ -237,8 +277,29 @@ export interface Projeto {
   nome: string;
   descricao: string;
   pedido: string;
+  repositorio: string;
   criadoEm: string;
   alteradoEm: string;
+}
+
+export const PAPEIS_HISTORICO = ["user", "assistant", "tool", "system"] as const;
+export type PapelHistorico = (typeof PAPEIS_HISTORICO)[number];
+
+/** O evento original e o instante separado em que o servidor o recebeu. */
+export interface EntradaHistorico {
+  id: number;
+  projetoId: number;
+  eventoId: string;
+  origem: string;
+  sessao: string;
+  papel: PapelHistorico;
+  conteudo: string;
+  modelo: string;
+  maquina: string;
+  criadoEm: string;
+  registradoEm: string;
+  /** JSON validado, preservado para que outros clientes possam importá-lo. */
+  metadados?: string;
 }
 
 export interface ArquivoDoDocumento {

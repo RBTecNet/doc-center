@@ -15,7 +15,7 @@
  * que uma falha deste módulo pode fazer é não mostrar uma página.
  */
 
-import { readFile, readdir, stat } from "node:fs/promises";
+import { readFile, readdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { Store } from "../db/store.js";
 import { moldura } from "./paginas.js";
@@ -62,6 +62,12 @@ async function ehDiretorio(caminho: string): Promise<boolean> {
   return await stat(caminho).then((info) => info.isDirectory()).catch(() => false);
 }
 
+/** A contenção também precisa valer depois de resolver links simbólicos. */
+async function caminhoContido(base: string, candidato: string): Promise<boolean> {
+  const [raiz, alvo] = await Promise.all([realpath(base).catch(() => null), realpath(candidato).catch(() => null)]);
+  return raiz !== null && alvo !== null && dentroDa(raiz, alvo);
+}
+
 /** Os projetos da base que têm runs para mostrar. */
 export async function projetosComRuns(base: string): Promise<ProjetoComRuns[]> {
   const entradas = await readdir(base, { withFileTypes: true }).catch(() => []);
@@ -69,7 +75,9 @@ export async function projetosComRuns(base: string): Promise<ProjetoComRuns[]> {
 
   for (const entrada of entradas) {
     if (!entrada.isDirectory()) continue;
-    const runs = await lerRuns(join(base, entrada.name));
+    const pasta = join(base, entrada.name);
+    if (!(await caminhoContido(base, join(pasta, ".capivara", "runs")))) continue;
+    const runs = await lerRuns(pasta);
     if (runs.length === 0) continue;
     achados.push({ nome: entrada.name, runs: runs.length, ultimo: runs[0]?.quando ?? null });
   }
@@ -86,8 +94,9 @@ export async function lerRuns(projectRoot: string): Promise<Run[]> {
   for (const entrada of entradas) {
     if (!entrada.isDirectory()) continue;
     const caminho = join(raiz, entrada.name);
+    if (!(await caminhoContido(raiz, caminho))) continue;
     const info = await stat(caminho).catch(() => null);
-    const estado = await readFile(join(caminho, "run.json"), "utf8")
+    const estado = await (await caminhoContido(caminho, join(caminho, "run.json")) ? readFile(join(caminho, "run.json"), "utf8") : Promise.resolve(""))
       .then((texto) => JSON.parse(texto) as { stage?: string; status?: string })
       .catch(() => null);
 
@@ -110,6 +119,7 @@ export async function arquivosDoRun(runRoot: string): Promise<string[]> {
     const entradas = await readdir(pasta, { withFileTypes: true }).catch(() => []);
     for (const entrada of entradas) {
       const caminho = join(pasta, entrada.name);
+      if (!(await caminhoContido(runRoot, caminho))) continue;
       if (entrada.isDirectory()) await andar(caminho);
       else if (entrada.isFile() && !entrada.name.startsWith(".")) achados.push(relative(runRoot, caminho));
     }
@@ -150,8 +160,8 @@ function comoLigar(): string {
     `<div class="bloco">`,
     `<h2>O visor está desligado</h2>`,
     `<p class="explicacao">Ele mostra os runs do capivara que estiverem numa pasta desta máquina. Aponte-a ao subir o doc-center:</p>`,
-    `<pre class="previa">doc-center --runs ~/Documentos/Projetos</pre>`,
-    `<p class="explicacao">Ou defina <code>DOC_CENTER_RUNS</code> no ambiente. Enquanto não houver pasta, nada muda: o visor é opcional, e nenhuma outra parte do doc-center depende dele.</p>`,
+    `<pre class="previa">doc-center --runs /srv/doc-center/runs</pre>`,
+    `<p class="explicacao">Ou defina <code>DOC_CENTER_RUNS</code>. Os arquivos de cada conta ficam em <code>&lt;pasta&gt;/&lt;id do usuário&gt;/&lt;slug do projeto&gt;/.capivara/runs/</code>. O ID está em Minha conta. O visor é opcional.</p>`,
     `</div>`,
   ].join("");
 }
@@ -182,7 +192,7 @@ export async function paginaDeRuns(store: Store, url: URL, base: string | null):
   const run = partes[2] ? nomeSimples(partes[2]) : null;
 
   if (partes.length === 1) {
-    const projetos = await projetosComRuns(base);
+    const projetos = (await projetosComRuns(base)).filter((entrada) => store.projetoPorSlug(entrada.nome) !== null);
     const corpo =
       projetos.length === 0
         ? `<div class="bloco"><h2>Nenhum run em ${escapar(base)}</h2>${EXPLICACAO}</div>`
@@ -200,8 +210,11 @@ export async function paginaDeRuns(store: Store, url: URL, base: string | null):
   }
 
   if (projeto === null) return null;
+  if (!store.projetoPorSlug(projeto)) return null;
   const projectRoot = join(base, projeto);
-  if (!dentroDa(base, projectRoot) || !(await ehDiretorio(projectRoot))) return null;
+  if (!dentroDa(base, projectRoot) || !(await caminhoContido(base, projectRoot)) || !(await ehDiretorio(projectRoot))) return null;
+  const runsRoot = join(projectRoot, ".capivara", "runs");
+  if (!(await caminhoContido(projectRoot, runsRoot))) return null;
 
   if (partes.length === 2) {
     const runs = await lerRuns(projectRoot);
@@ -222,13 +235,13 @@ export async function paginaDeRuns(store: Store, url: URL, base: string | null):
 
   if (run === null) return null;
   const runRoot = join(projectRoot, ".capivara", "runs", run);
-  if (!dentroDa(base, runRoot) || !(await ehDiretorio(runRoot))) return null;
+  if (!dentroDa(base, runRoot) || !(await caminhoContido(runsRoot, runRoot)) || !(await ehDiretorio(runRoot))) return null;
 
   const pedido = url.searchParams.get("arquivo");
   if (pedido !== null) {
     const alvo = resolve(runRoot, pedido);
     // O arquivo tem de estar DENTRO do run pedido, não só dentro da base.
-    if (!dentroDa(runRoot, alvo)) return null;
+    if (!dentroDa(runRoot, alvo) || !(await caminhoContido(runRoot, alvo))) return null;
     const conteudo = await readFile(alvo, "utf8").catch(() => null);
     if (conteudo === null) return null;
 
@@ -245,7 +258,8 @@ export async function paginaDeRuns(store: Store, url: URL, base: string | null):
   }
 
   const arquivos = await arquivosDoRun(runRoot);
-  const eventos = await readFile(join(runRoot, "events.tsv"), "utf8").catch(() => "");
+  const eventos = await caminhoContido(runRoot, join(runRoot, "events.tsv"))
+    ? await readFile(join(runRoot, "events.tsv"), "utf8").catch(() => "") : "";
   const linhasDeEvento = eventos
     .trimEnd()
     .split("\n")

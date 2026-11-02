@@ -15,7 +15,7 @@ import type { Store } from "../db/store.js";
 import type { Documento, Projeto } from "../db/schema.js";
 import { NATUREZAS, conteineresPara, ehDeCatalogo } from "../db/schema.js";
 import { cartaoDeCatalogo, filtros, formularioDeCatalogo, formularioDePacote } from "./catalogo.js";
-import { uriDoDocumento, uriDoPedido } from "../mcp/server.js";
+import { paginaDoHistorico, resumoDoHistorico, uriDoDocumento, uriDoPedido } from "../mcp/server.js";
 import { renderArvore } from "./arvore.js";
 import { escapar } from "./escapar.js";
 import { CSS, FONTES, MAIS_SVG, PASTA_SVG, RAIO_SVG } from "./tema.js";
@@ -47,7 +47,23 @@ export function moldura(store: Store, pagina: Moldura): string {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="${FONTES}">
-<style>${CSS}</style>
+<style>${CSS}
+.topo .conta-link { color: var(--texto-3); font-size: 11.5px; text-decoration: none; white-space: nowrap; }
+.topo .conta-link:hover { color: var(--verde-claro); }
+.topo .erro-sair { color: var(--vermelho); font-size: 11px; }
+.historico-cartao { padding: 13px 15px; display: flex; flex-direction: column; gap: 10px; }
+.historico-cartao .metadados { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; color: var(--texto-3); font-size: 11px; }
+.historico-cartao .trecho { color: var(--texto-3); white-space: pre-wrap; overflow-wrap: anywhere; font: 11.5px/1.6 var(--mono); }
+.historico-cartao details > summary { color: var(--verde-claro); font-size: 11.5px; cursor: pointer; }
+.historico-cartao details > pre { margin-top: 9px; white-space: pre-wrap; overflow-wrap: anywhere; font: 11.5px/1.6 var(--mono); max-height: 500px; overflow: auto; }
+.historico-cartao form { margin-top: 10px; }
+.historico-cartao .erro { color: var(--vermelho); font-size: 12px; }
+.historico-cartao .status { color: var(--texto-3); font-size: 12px; }
+.historico-paginacao { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; }
+.historico-paginacao a, .repositorio a { color: var(--verde-claro); }
+.repositorio { color: var(--texto-3); font-size: 12px; overflow-wrap: anywhere; }
+@media (max-width: 540px) { .topo .caminho { display: none; } .topo { padding: 0 12px; gap: 6px; } }
+</style>
 </head>
 <body>
 <div class="console">
@@ -71,7 +87,7 @@ export function moldura(store: Store, pagina: Moldura): string {
       ${PASTA_SVG}
       <h1>${escapar(pagina.titulo)}</h1>
       <div class="caminho">${escapar(pagina.caminho)}</div>
-      <div class="acoes-topo">${pagina.pilula ? `<div class="pilula">${escapar(pagina.pilula)}</div>` : ""}</div>
+      <div class="acoes-topo">${pagina.pilula ? `<div class="pilula">${escapar(pagina.pilula)}</div>` : ""}<a class="conta-link" href="/conta">Minha conta</a><button class="discreto" type="button" data-sair>Sair</button><span class="erro-sair" data-sair-erro role="alert" hidden></span></div>
     </header>
     <div class="rolagem"><div class="coluna">${pagina.corpo}</div></div>
   </main>
@@ -264,7 +280,7 @@ function paginaGeral(store: Store): string {
   });
 }
 
-function paginaProjeto(store: Store, projeto: Projeto): string {
+function paginaProjeto(store: Store, projeto: Projeto, url: URL): string {
   const proprios = store.listarProprios(projeto.id);
   const usados = store.listarDoProjeto(projeto.id);
   const selecionados = new Set(store.idsSelecionados(projeto.id));
@@ -289,6 +305,8 @@ function paginaProjeto(store: Store, projeto: Projeto): string {
     O harness lê este projeto com <code>--mcp-project ${escapar(projeto.slug)}</code> e recebe o pedido
     mais <strong>${usados.length}</strong> documento(s). Nada além disso.</p>
 
+  ${repositorioDoProjeto(projeto.repositorio)}
+
   <section class="bloco" id="pedido">
     <h2>Prompt <span class="contagem">o que construir</span></h2>
     <form class="campos" data-json method="put" action="/api/projetos/${escapar(projeto.slug)}">
@@ -296,6 +314,8 @@ function paginaProjeto(store: Store, projeto: Projeto): string {
       <div class="linha-acoes"><button type="submit">salvar pedido</button></div>
     </form>
   </section>
+
+  ${secaoDoHistorico(store, projeto, url)}
 
   ${conteineresPara(usados)
     .map((tipo) =>
@@ -334,6 +354,46 @@ function paginaProjeto(store: Store, projeto: Projeto): string {
       ),
     },
   });
+}
+
+function repositorioDoProjeto(repositorio: string): string {
+  if (!repositorio) return "";
+  let link = false;
+  try { const url = new URL(repositorio); link = ["http:", "https:"].includes(url.protocol) && !url.username && !url.password; }
+  catch { /* Endereços sem URL navegável continuam legíveis. */ }
+  return `<p class="repositorio">Repositório: ${link ? `<a href="${escapar(repositorio)}" target="_blank" rel="noopener noreferrer">${escapar(repositorio)}</a>` : escapar(repositorio)}</p>`;
+}
+
+function secaoDoHistorico(store: Store, projeto: Projeto, url: URL): string {
+  const valor = url.searchParams.get("historico_depois");
+  const depois = valor !== null && /^\d+$/.test(valor) && Number.isSafeInteger(Number(valor)) ? Number(valor) : 0;
+  const paginada = valor !== null;
+  const pagina = paginada ? paginaDoHistorico(store, projeto, depois, 30) : null;
+  const entradas = pagina?.entradas ?? store.ultimasDoHistorico(projeto.id, 30).map((entrada) => resumoDoHistorico(projeto.slug, entrada));
+  const total = pagina?.total ?? store.contarHistorico(projeto.id);
+  const papeis = { user: "usuário", assistant: "assistente", tool: "ferramenta", system: "sistema (histórico)" };
+  const data = (valor: string): string => new Date(valor).toLocaleString("pt-BR");
+  const href = `/projetos/${escapar(projeto.slug)}`;
+  return `<section class="bloco" id="historico">
+    <h2>Histórico de conversas <span class="contagem">${total} mensagem(ns)</span></h2>
+    <p class="explicacao">Conversas registradas pelas suas CLIs ficam reunidas neste projeto. Mensagens antigas preservam o contexto; seu pedido atual continua no campo acima.</p>
+    ${entradas.length === 0 ? '<p class="vazio">Nenhuma mensagem registrada. Ative a captura de conversas na sua CLI para preservar as próximas mensagens.</p>' : ""}
+    ${entradas.map((entrada) => `<article class="cartao historico-cartao" id="historico-${entrada.id}" data-historico-cartao data-projeto="${escapar(projeto.slug)}" data-entrada="${entrada.id}">
+      <div class="metadados"><span class="etiqueta">${papeis[entrada.papel]}</span><strong>${escapar(entrada.origem)}</strong><time datetime="${escapar(entrada.criadoEm)}">${escapar(data(entrada.criadoEm))}</time>${entrada.modelo ? `<span>${escapar(entrada.modelo)}</span>` : ""}${entrada.maquina ? `<span>${escapar(entrada.maquina)}</span>` : ""}</div>
+      <p class="trecho">${escapar(entrada.previa)}${entrada.caracteres > entrada.previa.length ? "…" : ""}</p>
+      <details data-historico-detalhe><summary>Ler mensagem inteira <span class="contagem">${entrada.caracteres.toLocaleString("pt-BR")} caracteres</span></summary><pre data-historico-conteudo>Carregando…</pre></details>
+      <div class="linha-acoes"><button class="discreto" type="button" data-copiar-historico>Copiar mensagem</button></div>
+      <details><summary>Salvar como prompt reutilizável</summary>
+        <form class="campos" data-reutilizar-historico method="post" action="/api/documentos"><label>título do prompt <input name="titulo" required maxlength="120" autocomplete="off" placeholder="como você vai reconhecer este prompt"></label><button type="submit">Salvar no projeto</button></form>
+      </details>
+      <p class="erro" data-historico-erro role="alert" hidden></p><p class="status" data-historico-status role="status" hidden></p>
+    </article>`).join("")}
+    <nav class="historico-paginacao" aria-label="Paginação do histórico">
+      ${total > entradas.length || paginada ? `<a href="${href}?historico_depois=0#historico">Ver histórico desde o início</a>` : ""}
+      ${pagina?.proximo !== null && pagina?.proximo !== undefined ? `<a href="${href}?historico_depois=${pagina.proximo}#historico">Próximas mensagens</a>` : ""}
+      ${paginada ? `<a href="${href}#historico">Mensagens mais recentes</a>` : ""}
+    </nav>
+  </section>`;
 }
 
 /**
@@ -393,7 +453,7 @@ export function paginaDe(store: Store, url: URL): string | null {
 
   if (partes[0] === "projetos" && partes[1]) {
     const projeto = store.projetoPorSlug(partes[1]);
-    return projeto ? paginaProjeto(store, projeto) : null;
+    return projeto ? paginaProjeto(store, projeto, url) : null;
   }
 
   return null;

@@ -2,4 +2,8 @@ node_modules/
 dist/
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
+doc-center.log
+.doc-center/local/
 public/app.js

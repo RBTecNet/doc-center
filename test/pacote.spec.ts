@@ -12,6 +12,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Server } from "node:http";
 import { Store } from "../src/db/store.js";
 import { createApp, listen } from "../src/http.js";
+import { autenticarTeste } from "./auth-fixture.js";
 import { caminhoSeguro, lerZip, pareceTexto, raizComum } from "../src/zip.js";
 import { lerFrontmatter, lerPacote, partirDescricao, semFrontmatter } from "../src/skill.js";
 
@@ -170,13 +171,17 @@ describe("o frontmatter é a vitrine já escrita", () => {
 
 describe("importar e servir o pacote", () => {
   let store: Store;
+  let rootStore: Store;
+  let headers: Record<string, string> = {};
+  let mcpHeaders: Record<string, string> = {};
   let server: Server;
   let base = "";
 
   const pedir = async (metodo: string, caminho: string, corpo?: unknown) => {
     const resposta = await fetch(`${base}${caminho}`, {
       method: metodo,
-      ...(corpo === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) }),
+      headers: { ...headers, ...(corpo === undefined ? {} : { "content-type": "application/json" }) },
+      ...(corpo === undefined ? {} : { body: JSON.stringify(corpo) }),
     });
     return { status: resposta.status, dado: (await resposta.json()) as any };
   };
@@ -184,22 +189,23 @@ describe("importar e servir o pacote", () => {
   const rpc = async (method: string, params?: Record<string, unknown>) => {
     const resposta = await fetch(`${base}/mcp`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { ...mcpHeaders, "content-type": "application/json" },
       body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, ...(params ? { params } : {}) }),
     });
     return (await resposta.json()) as any;
   };
 
   beforeEach(async () => {
-    store = new Store({ file: ":memory:" });
+    store = rootStore = new Store({ file: ":memory:" });
     server = createApp({ store });
     base = `http://127.0.0.1:${await listen(server, 0)}`;
+    ({ store, headers, mcpHeaders } = await autenticarTeste(rootStore, base));
     await pedir("POST", "/api/projetos", { nome: "Biblioteca", pedido: "uma base documental" });
   });
 
   afterEach(async () => {
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    store.close();
+    rootStore.close();
   });
 
   it("o cartão nasce preenchido pelo frontmatter", async () => {

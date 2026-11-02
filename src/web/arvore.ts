@@ -105,6 +105,7 @@ export function renderArvore(
             data-proprios="${documentos.filter((documento) => documento.projetoId === projeto.id).length}">${LIXEIRA_SVG}</button>
         </summary>
         ${pedido}
+        ${item(`${href}#historico`, TEXTO_SVG, "Histórico de conversas", 1)}
         ${conteineresPara(documentos)
           .map((tipo) =>
             conteiner(

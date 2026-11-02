@@ -7,19 +7,13 @@
  */
 
 import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Store } from "../db/store.js";
+import { ErroDeUso, type Store } from "../db/store.js";
+import { contextoDoProjeto, paginaDoHistorico } from "../mcp/server.js";
 import { responderJson } from "../http.js";
 import { lerPacote } from "../skill.js";
 import { lerZip, pareceTexto } from "../zip.js";
 import { exportarProjeto, importarProjeto } from "../projeto-zip.js";
-
-async function corpoJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  const partes: Buffer[] = [];
-  for await (const pedaco of req) partes.push(pedaco as Buffer);
-  const texto = Buffer.concat(partes).toString("utf8");
-  if (texto.trim() === "") return {};
-  return JSON.parse(texto) as Record<string, unknown>;
-}
+import { corpoJson } from "../request.js";
 
 const texto = (valor: unknown): string => (typeof valor === "string" ? valor : "");
 
@@ -79,6 +73,30 @@ export async function rotaApi(store: Store, req: IncomingMessage, res: ServerRes
           proprios: store.listarProprios(projeto.id),
           selecionados: store.idsSelecionados(projeto.id),
         });
+        return;
+      }
+
+      if (metodo === "GET" && partes[3] === "contexto" && partes[4] === undefined) {
+        responderJson(res, 200, contextoDoProjeto(store, projeto));
+        return;
+      }
+      if (metodo === "GET" && partes[3] === "historico") {
+        if (partes[4] !== undefined) {
+          if (partes[5] !== undefined || !/^[1-9]\d*$/.test(partes[4])) throw new ErroDeUso("id inválido no histórico");
+          const id = Number(partes[4]);
+          if (!Number.isSafeInteger(id)) throw new ErroDeUso("id inválido no histórico");
+          const entrada = store.entradaDoHistorico(projeto.id, id);
+          if (!entrada) { responderJson(res, 404, { erro: "entrada do histórico não existe" }); return; }
+          responderJson(res, 200, { entrada });
+          return;
+        }
+        const numero = (nome: string, padrao: number): number => {
+          const valor = url.searchParams.get(nome);
+          if (valor === null) return padrao;
+          if (!/^\d+$/.test(valor)) throw new ErroDeUso("paginação precisa usar números inteiros");
+          return Number(valor);
+        };
+        responderJson(res, 200, paginaDoHistorico(store, projeto, numero("depois", 0), numero("limite", 100)));
         return;
       }
 

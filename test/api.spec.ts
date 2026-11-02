@@ -12,28 +12,33 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Server } from "node:http";
 import { Store } from "../src/db/store.js";
 import { createApp, listen } from "../src/http.js";
+import { autenticarTeste } from "./auth-fixture.js";
 
 let store: Store;
+let root: Store;
 let server: Server;
 let base = "";
+let headers: Record<string, string>;
 
 async function pedir(metodo: string, caminho: string, corpo?: unknown): Promise<{ status: number; dado: any }> {
   const resposta = await fetch(`${base}${caminho}`, {
     method: metodo,
-    ...(corpo === undefined ? {} : { headers: { "content-type": "application/json" }, body: JSON.stringify(corpo) }),
+    headers: { ...headers, ...(corpo === undefined ? {} : { "content-type": "application/json" }) },
+    ...(corpo === undefined ? {} : { body: JSON.stringify(corpo) }),
   });
   return { status: resposta.status, dado: await resposta.json() };
 }
 
 beforeEach(async () => {
-  store = new Store({ file: ":memory:" });
-  server = createApp({ store });
+  root = new Store({ file: ":memory:" });
+  server = createApp({ store: root });
   base = `http://127.0.0.1:${await listen(server, 0)}`;
+  ({ store, headers } = await autenticarTeste(root, base));
 });
 
 afterEach(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
-  store.close();
+  root.close();
 });
 
 const SKILL = {
@@ -142,7 +147,7 @@ describe("ler um artefato inteiro na tela", () => {
     const longo = Array.from({ length: 200 }, (_, indice) => `linha ${indice} do levantamento`).join("\n");
     store.criarDocumento({ projetoId: projeto.id, tipo: "documentacao", titulo: "Levantamento", conteudo: longo });
 
-    const html = await (await fetch(`${base}/projetos/p`)).text();
+    const html = await (await fetch(`${base}/projetos/p`, { headers })).text();
     expect(html).toContain("linha 0 do levantamento");
     expect(html).toContain("linha 199 do levantamento");
   });
@@ -151,17 +156,55 @@ describe("ler um artefato inteiro na tela", () => {
     const projeto = store.criarProjeto({ nome: "Q", slug: "q", pedido: "x" });
     store.criarDocumento({ projetoId: projeto.id, tipo: "documentacao", titulo: "Enorme", conteudo: "a".repeat(30_000) });
 
-    const html = await (await fetch(`${base}/projetos/q`)).text();
+    const html = await (await fetch(`${base}/projetos/q`, { headers })).text();
     expect(html).toContain("mostrando os primeiros");
     expect(html).toContain("abra em editar para ver tudo");
   });
 
   it("prompts têm seu próprio botão de criar, com campo de descrição", async () => {
     store.criarProjeto({ nome: "R", slug: "r", pedido: "x" });
-    const html = await (await fetch(`${base}/projetos/r`)).text();
+    const html = await (await fetch(`${base}/projetos/r`, { headers })).text();
 
     expect(html).toContain("novo prompt");
     // A descrição é o que distingue dois prompts na hora de escolher, no wizard.
     expect(html).toContain("quando usar este prompt");
+  });
+});
+
+describe("entrada e conexões da conta", () => {
+  it("oferece entrada por senha e protege a tela de conexões", async () => {
+    const resposta = await fetch(`${base}/conta`, { redirect: "manual" });
+    expect(resposta.status).toBe(303);
+    expect(resposta.headers.get("location")).toBe("/login");
+
+    const login = await (await fetch(`${base}/login`)).text();
+    expect(login).toContain('action="/api/auth/login"');
+    expect(login).toContain('type="password"');
+    expect(login).toContain('autocomplete="current-password"');
+
+    const cadastro = await (await fetch(`${base}/cadastro`)).text();
+    expect(cadastro).toContain('action="/api/auth/register"');
+    expect(cadastro).toContain('autocomplete="new-password"');
+    expect(cadastro).toContain('minlength="12"');
+  });
+
+  it("escapa nomes e mostra somente o prefixo de cada token", async () => {
+    const projeto = store.criarProjeto({ nome: '<img src=x onerror="alert(1)">', slug: "projeto-seguro" });
+    const ataque = '<script>alert("token")</script>';
+    const criado = await pedir("POST", "/api/tokens", { nome: ataque, projeto: projeto.slug, permissao: "leitura" });
+    expect(criado.status).toBe(201);
+
+    const html = await (await fetch(`${base}/conta`, { headers })).text();
+    expect(html).toContain("Minha conta");
+    expect(html).toContain("Pessoa de teste");
+    expect(html).toContain("&lt;script&gt;alert(&quot;token&quot;)&lt;/script&gt;");
+    expect(html).toContain("&lt;img src=x onerror=&quot;alert(1)&quot;&gt;");
+    expect(html).not.toContain(ataque);
+    expect(html).not.toContain(projeto.nome);
+    expect(html).toContain(criado.dado.credencial.prefixo);
+    expect(html).not.toContain(criado.dado.token);
+    expect(html).toContain('data-revogar-token="' + criado.dado.credencial.id + '"');
+    expect(html).toContain("DOC_CENTER_TOKEN");
+    expect(html).toContain("doc-center connect");
   });
 });
