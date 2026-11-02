@@ -45,9 +45,3 @@ recursos associados ao projeto.
 Banco é `node:sqlite`, servidor é `node:http`, e o MCP é JSON-RPC escrito aqui —
 a aplicação inteira roda sem instalar nada além do Node. `esbuild`, `typescript`
 e `vitest` são de desenvolvimento.
-
-## O que o MVP não faz
-
-Não é multi-tenant: é de uso próprio, sem contas nem autorização. Editar
-conteúdo é um `prompt()` do navegador — um editor de verdade é trabalho de tela,
-e entra quando o resto estiver firme.
