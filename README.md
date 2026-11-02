@@ -1,15 +1,10 @@
 # doc-center
 
-A base documental do capivara: skills, memórias, documentação técnica, hooks e
-os pedidos de cada projeto — num lugar só, servidos por **MCP**.
+Base documental para projetos: skills, memórias, documentação técnica, hooks e
+pedidos — reunidos em um só lugar e disponibilizados por **MCP**.
 
-O harness não recebe "toda a documentação disponível". Ele pede o material de
-**um** projeto e recebe o pedido mais os documentos que aquele projeto
-selecionou. O resto do acervo continua existindo e não entra em run nenhum.
-
-```
-capivara init --mcp http://localhost:7777/mcp --mcp-project biblioteca
-```
+Um cliente MCP consulta os recursos de **um** projeto e acessa seu pedido e os
+documentos associados a ele. O restante do acervo não é incluído automaticamente.
 
 ## Rodar
 
@@ -33,10 +28,10 @@ separadas obrigariam a inventar uma a cada tipo novo.
 geral. É a diferença entre ter e usar. A seleção aponta em vez de copiar: quem
 corrige o original corrige para todos os projetos que o escolheram.
 
-**O pedido é do projeto, e é um só.** Não é um documento entre outros: é o que o
-harness lê para saber o que construir.
+**O pedido é do projeto, e é um só.** Não é um documento entre outros: é a
+referência principal do projeto disponível aos clientes MCP.
 
-## O contrato com o harness
+## Recursos MCP por projeto
 
 ```
 capivara://<projeto>/pedido
@@ -48,9 +43,8 @@ Sob um projeto aparece **o que ele usa** — o que é dele mais o que selecionou
 Pedir um documento da área geral que o projeto não selecionou é recusado: se
 bastasse o par tipo/slug, a seleção não significaria nada.
 
-A coluna direita da interface mostra exatamente essas URIs, na ordem em que o
-harness as lê. É a resposta para "o que disto vai junto?", que antes só existia
-do outro lado do protocolo.
+A coluna direita da interface mostra essas URIs para facilitar a consulta dos
+recursos associados ao projeto.
 
 ## Zero dependências de runtime
 
